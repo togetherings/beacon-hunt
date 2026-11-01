@@ -59,7 +59,13 @@
         "title": "Oceania",
         "scale_km": 600
       }
-    ]
+    ],
+    "weights": {
+      "country": 1,
+      "location": 2
+    },
+    "max_share": 0.05,
+    "max_photo_ratio": 3
   },
   "scoring": {
     "label": "Points",

@@ -57,7 +57,7 @@ def test_regions_are_un_sub_regions():
     assert regions.countries_in("west-africa") == [
         "BEN", "BFA", "CIV", "CPV", "GHA", "GIN", "GMB", "GNB", "LBR", "MLI", "MRT", "NER", "NGA", "SEN", "SLE", "TGO"]
     assert "HKG" in regions.countries_in("eastern-asia") and "MAC" in regions.countries_in("eastern-asia")
-    assert "GIB" not in regions.countries_in("southern-europe")
+    assert "GIB" in regions.countries_in("southern-europe") and "JEY" not in regions.countries_in("northern-europe")
     seen = {}
     for rid in regions.REGIONS:
         for c in regions.countries_in(rid):

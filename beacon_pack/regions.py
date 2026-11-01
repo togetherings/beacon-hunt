@@ -11,35 +11,34 @@ in game/kolibri-game.json and game/game.js; a test checks they match.
   Northern Asia; France has land in the Caribbean, South America and East
   Africa). A photo's region is where it was taken: see photo_region().
 * **Left out:** disputed areas (Crimea, Western Sahara, Northern Cyprus,
-  Somaliland) can't be guessed, and photos taken there are skipped.
+  Somaliland) and some territories (see INCLUDED_TERRITORIES) can't be
+  guessed, and photos taken there are skipped.
 """
 from . import geo
 
-#: Pack regions: id -> (title, [UN sub-regions], include territories).
-#: Regions made mostly of islands that belong to other countries (the
-#: Caribbean, the Pacific) include territories; the others include only UN
-#: members, observers and partly recognised countries, plus INCLUDED_TERRITORIES.
+#: Pack regions: id -> (title, [UN sub-regions]). Which countries and
+#: territories are in the game at all is decided by left_out() below.
 REGIONS = {
-    "west-africa": ("West Africa", ["Western Africa"], False),
-    "north-africa": ("North Africa", ["Northern Africa"], False),
-    "east-africa": ("East Africa", ["Eastern Africa"], False),
-    "central-africa": ("Central Africa", ["Middle Africa"], False),
-    "southern-africa": ("Southern Africa", ["Southern Africa"], False),
-    "northern-america": ("Northern America", ["Northern America"], False),
-    "central-america": ("Central America", ["Central America"], False),
-    "caribbean": ("Caribbean", ["Caribbean"], True),
-    "south-america": ("South America", ["South America"], False),
-    "northern-europe": ("Northern Europe", ["Northern Europe"], False),
-    "western-europe": ("Western Europe", ["Western Europe"], False),
-    "southern-europe": ("Southern Europe", ["Southern Europe"], False),
-    "eastern-europe": ("Eastern Europe", ["Eastern Europe"], False),
-    "western-asia": ("Western Asia", ["Western Asia"], False),
-    "central-asia": ("Central Asia", ["Central Asia"], False),
-    "southern-asia": ("South Asia", ["Southern Asia"], False),
-    "eastern-asia": ("East Asia", ["Eastern Asia"], False),
-    "south-eastern-asia": ("Southeast Asia", ["South-Eastern Asia"], False),
-    "oceania": ("Australia and New Zealand", ["Australia and New Zealand"], False),
-    "pacific-islands": ("Pacific Islands", ["Melanesia", "Micronesia", "Polynesia"], True),
+    "west-africa": ("West Africa", ["Western Africa"]),
+    "north-africa": ("North Africa", ["Northern Africa"]),
+    "east-africa": ("East Africa", ["Eastern Africa"]),
+    "central-africa": ("Central Africa", ["Middle Africa"]),
+    "southern-africa": ("Southern Africa", ["Southern Africa"]),
+    "northern-america": ("Northern America", ["Northern America"]),
+    "central-america": ("Central America", ["Central America"]),
+    "caribbean": ("Caribbean", ["Caribbean"]),
+    "south-america": ("South America", ["South America"]),
+    "northern-europe": ("Northern Europe", ["Northern Europe"]),
+    "western-europe": ("Western Europe", ["Western Europe"]),
+    "southern-europe": ("Southern Europe", ["Southern Europe"]),
+    "eastern-europe": ("Eastern Europe", ["Eastern Europe"]),
+    "western-asia": ("Western Asia", ["Western Asia"]),
+    "central-asia": ("Central Asia", ["Central Asia"]),
+    "southern-asia": ("South Asia", ["Southern Asia"]),
+    "eastern-asia": ("East Asia", ["Eastern Asia"]),
+    "south-eastern-asia": ("Southeast Asia", ["South-Eastern Asia"]),
+    "oceania": ("Australia and New Zealand", ["Australia and New Zealand"]),
+    "pacific-islands": ("Pacific Islands", ["Melanesia", "Micronesia", "Polynesia"]),
 }
 
 #: Asian Russia's region (not a UN sub-region: the UN puts all of Russia in Eastern Europe).
@@ -56,12 +55,24 @@ CONTINENTS = {
     "oceania": ("Oceania", ["Australia and New Zealand", "Melanesia", "Micronesia", "Polynesia"]),
 }
 
-#: Territories that get photos even in regions that otherwise leave territories
-#: out: places with their own look and plenty of photos on Mapillary.
-INCLUDED_TERRITORIES = {"HKG", "MAC"}
+#: Regions made mostly of islands that belong to other countries: their territories are in the game.
+ISLAND_REGIONS = {"Caribbean", "Melanesia", "Micronesia", "Polynesia"}
+
+#: Territories elsewhere that are in the game: places with their own look.
+#: Other territories (Jersey, Guernsey, the Isle of Man, Åland, Saint Pierre
+#: and Miquelon, Norfolk Island, Saint Helena, the Indian Ocean Territories)
+#: are drawn but can't be picked, and photos taken there are skipped.
+INCLUDED_TERRITORIES = {"HKG", "MAC", "GRL", "FRO", "FLK", "BMU", "GIB"}
 
 #: Disputed areas left out of the game, at least for now.
 EXCLUDED = {"XCR", "SAH", "CYN", "SOL"}
+
+
+def left_out(code, kind, sub):
+    """Is this place left out of the game (drawn on the map, but can't be picked)?"""
+    if code in EXCLUDED:
+        return True
+    return kind == "territory" and sub not in ISLAND_REGIONS and code not in INCLUDED_TERRITORIES
 
 
 def continent_of(region):
@@ -116,11 +127,9 @@ def countries_in(region_id, countries=None):
     """The country codes in a pack region, sorted."""
     if region_id not in REGIONS:
         raise KeyError(region_id)
-    countries = countries or geo.load_countries()
-    _title, subs, territories = REGIONS[region_id]
-    return sorted(code for code, c in countries.items()
-                  if code not in EXCLUDED and c.get("sub") in subs
-                  and (territories or c.get("kind") != "territory" or code in INCLUDED_TERRITORIES))
+    countries = countries or geo.load_countries()  # only the places in the game (see left_out)
+    _title, subs = REGIONS[region_id]
+    return sorted(code for code, c in countries.items() if c.get("sub") in subs)
 
 
 def title(region_id):

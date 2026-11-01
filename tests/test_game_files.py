@@ -61,25 +61,42 @@ def test_the_game_knows_the_same_continents_as_the_pack_tool():
     # Every UN sub-region is on exactly one continent.
     subs = [s for _t, subs in regions.CONTINENTS.values() for s in subs]
     assert len(subs) == len(set(subs))
-    assert {c["sub"] for c in geo.load_countries().values()} - set(subs) == {"Seven seas (open ocean)"}
+    assert {c["sub"] for c in geo.load_countries().values()} <= set(subs)
 
 
 def test_countries_know_their_regions_continents_and_neighbours():
     c = geo.load_countries()
     assert not regions.EXCLUDED & set(c), "disputed areas are left out"
+    assert {"HKG", "MAC", "GRL", "FRO", "FLK", "BMU", "GIB"} <= set(c)
+    assert not {"JEY", "GGY", "IMN", "ALD", "SPM", "NFK", "SHN", "IOA"} & set(c), "other territories are left out"
+    assert "PRI" in c and "PYF" in c  # island regions keep their territories
+    world = geo.load_map()
+    assert all(r.get("off") for r in world["regions"] if r.get("key") in ("JEY", "XCR")), "drawn, but can't be picked"
     assert c["RUS"]["continents"] == ["east-asia", "europe"] and "Northern Asia" in c["RUS"]["regions"]
     assert c["IDN"]["continents"] == ["east-asia", "oceania"] and c["TLS"]["continents"] == ["east-asia"]
     assert "south-america" in c["FRA"]["continents"]  # French Guiana
     assert "CUB" in c["USA"]["neighbours"] and "USA" in c["CUB"]["neighbours"]  # across water
     assert "FRA" in c["GBR"]["neighbours"] and "MYS" in c["SGP"]["neighbours"]
     assert "TUN" in c["ITA"]["neighbours"] and "AUS" not in c["TLS"]["neighbours"]
-    # How often countries come up: by the square root of their area.
-    assert 2.7 < c["BRA"]["weight"] / c["NGA"]["weight"] < 3.3
-    assert 60 < c["RUS"]["weight"] / c["LUX"]["weight"] < 100
-    assert all(info["weight"] >= 1 for info in c.values())
+    # How often countries come up: (area x population) ** 1/4.
+    for code in ("CHN", "NGA", "GRL", "LUX"):
+        info = c[code]
+        assert abs(info["weight"] - (info["area_km2"] * info["population"]) ** 0.25) <= 1, code
+    assert c["GRL"]["weight"] < c["SLE"]["weight"] < c["NGA"]["weight"] < c["CHN"]["weight"]
+    assert all(info["weight"] >= 1 and info["population"] > 0 for info in c.values())
+    m = json.loads(read("game", "kolibri-game.json"))["photos"]
+    assert m["weights"] == {"country": 1, "location": 2} and m["max_share"] and m["max_photo_ratio"]
     for code, info in c.items():
         for n in info["neighbours"]:
             assert code in c[n]["neighbours"], (code, n)
+
+
+def test_tiny_places_and_left_out_places_are_found():
+    w = geo.WorldMap()
+    assert w.locate(36.14, -5.353)[0] == "GIB" and w.locate(41.9029, 12.4534)[0] == "VAT"
+    assert w.locate(62.01, -6.77)[0] == "FRO" and w.locate(64.18, -51.72)[0] == "GRL"
+    assert w.locate(49.19, -2.11) == (None, "in JEY, which the game leaves out")
+    assert w.locate(44.95, 34.1)[0] is None  # Crimea
 
 
 def test_where_russia_and_indonesia_are_split():

@@ -43,8 +43,12 @@ line in `~/.bashrc` (outside the repository).
 
 `beacon-pack regions` lists the regions (the UN's 20 sub-regions) and their countries.
 
-**Left out:** disputed areas (Crimea, Western Sahara, Northern Cyprus and Somaliland) aren't in the
-game. Photos taken there are skipped, and they're never counted for a neighbouring country.
+**Left out:** disputed areas (Crimea, Western Sahara, Northern Cyprus and Somaliland) and some
+territories (Jersey, Guernsey, the Isle of Man, Åland, Saint Pierre and Miquelon, Norfolk Island,
+Saint Helena and the Indian Ocean Territories) aren't in the game. They're drawn on the map but
+can't be picked, and photos taken there are skipped, never counted for a neighbouring country.
+Territories in the Caribbean and the Pacific are in, and so are Hong Kong, Macau, Greenland, the
+Faroe Islands, the Falkland Islands, Bermuda and Gibraltar.
 
 ### What it does
 

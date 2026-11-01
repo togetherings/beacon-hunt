@@ -85,7 +85,9 @@ KolibriGames.finish({})                       -> the server adds up the score
 * `game/viewer.js` shows 360° photos with a small WebGL viewer (drag, wheel or pinch, arrow keys)
   and ordinary photos with click-to-zoom.
 * `game/map/countries.json` gives each country's name, a point inside it, the regions and
-  continents it has land in, and its neighbours. The server uses it to score country guesses; the
+  continents it has land in, its neighbours, and its weight: (area × population)^¼, from
+  Natural Earth's populations. Country mode picks countries by the weight, place mode by its
+  square, with caps set in `kolibri-game.json`. The server uses it to score country guesses; the
   pack tool uses the map to check which country each
   photo is in.
 

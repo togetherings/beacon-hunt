@@ -19,6 +19,11 @@ Writes:
                            kolibri-games/docs/PHOTO_PACKS.md), and the pack tool
                            uses world.json to tell which country a photo is in.
 
+Each country's population (for how often it comes up in a game) is in
+tools/population.json, from Natural Earth. To refresh it:
+
+    python tools/import_singe_map.py --population path/to/ne_10m_admin_0_countries.geojson
+
 Run it again if SINGE's map changes. Nothing else needs editing by hand.
 """
 import json
@@ -56,6 +61,37 @@ def to_lat_lon(x, y, projection):
     return round(lat, 4), round(((lon + 180) % 360) - 180, 4)
 
 
+POPULATION = os.path.join(HERE, "population.json")
+
+
+def load_population():
+    """{code: population} from tools/population.json (see save_population)."""
+    with open(POPULATION, encoding="utf-8") as f:
+        return json.load(f)["population"]
+
+
+def save_population(geojson_path):
+    """Make tools/population.json from Natural Earth's 10m countries file (POP_EST, public domain).
+
+    Download ne_10m_admin_0_countries.geojson from github.com/nvkelso/natural-earth-vector
+    (folder geojson). Its ADM0_A3 codes are the same as SINGE's.
+    """
+    with open(geojson_path, encoding="utf-8") as f:
+        features = json.load(f)["features"]
+    population, year = {}, {}
+    for feature in features:
+        p = feature["properties"]
+        code = p.get("ADM0_A3")
+        if code and code not in population and p.get("POP_EST") is not None:
+            population[code] = int(p["POP_EST"])
+            year[code] = int(p.get("POP_YEAR") or 0)
+    with open(POPULATION, "w", encoding="utf-8") as f:
+        json.dump({"source": "Natural Earth 10m Admin 0 - Countries (public domain): POP_EST and POP_YEAR. "
+                             "Made by tools/import_singe_map.py --population.",
+                   "population": dict(sorted(population.items())), "year": dict(sorted(year.items()))}, f, indent=0)
+    print("%d populations -> %s" % (len(population), POPULATION))
+
+
 def load(path):
     with open(path, encoding="utf-8") as f:
         text = f.read()
@@ -74,6 +110,9 @@ def convert(src):
             return key_of(by_name[r["part_of"]])
         return r["code"]
 
+    # Places left out of the game: disputed areas and most territories (beacon_pack/regions.py).
+    left = {r["code"] for r in m["regions"]
+            if r.get("kind") not in ("part", "decor") and R.left_out(r["code"], r.get("kind"), r.get("sub"))}
     regions, countries = [], {}
     for r in m["regions"]:
         key = key_of(r)
@@ -81,10 +120,10 @@ def convert(src):
         for field in ("s", "mk", "sz", "small", "ins", "decor", "twin", "iso2"):
             if field in r:
                 out[field] = r[field]
-        if key in R.EXCLUDED:
-            out["off"] = 1  # a disputed area left out of the game: drawn, but can't be picked
+        if key in left:
+            out["off"] = 1  # left out of the game: drawn, but can't be picked
         regions.append(out)
-        if key and key not in R.EXCLUDED and r.get("kind") != "part" and key not in countries:
+        if key and key not in left and r.get("kind") != "part" and key not in countries:
             mk = r.get("mk")
             if mk is None:  # a territory made only of separate parts (Saint Helena...): use its largest part
                 parts = [p for p in m["regions"] if p.get("part_of") == r["name"] and p.get("mk")]
@@ -105,15 +144,21 @@ def convert(src):
         c["regions"] = sorted(c.get("regions", ()))
         c["continents"] = sorted({R.continent_of(s) for s in c["regions"]} - {None})
     world_shapes = {"projection": m["projection"], "regions": regions}
-    neighbours = geo.find_neighbours(geo.outline_points(world_shapes, skip=R.EXCLUDED), NEIGHBOUR_KM)
+    neighbours = geo.find_neighbours(geo.outline_points(world_shapes, skip=left), NEIGHBOUR_KM)
     for key, c in countries.items():
         c["neighbours"] = [n for n in neighbours.get(key, []) if n in countries]
-    # How often each country comes up in a game: the square root of its area (in km),
-    # so big countries come up more often than tiny ones, but every country sometimes.
+    # How often each country comes up in a game: (area x population) to the power 1/4,
+    # which counts area and population equally and then evens things out, so big,
+    # populous countries come up more often than tiny or empty ones, but every country
+    # sometimes. Kolibri Games uses it as it is in country mode and squared in place
+    # mode (the manifest's photos.weights).
     world_map = geo.WorldMap({"projection": m["projection"], "regions": regions})
+    population = load_population()
     for key, c in countries.items():
-        area = world_map.area_km2(key) if key in world_map.countries else 0
-        c["weight"] = max(1, int(round(math.sqrt(area))))
+        area = world_map.area_km2(key) if key in world_map.countries else 1.0
+        c["area_km2"] = int(round(area))
+        c["population"] = population.get(key, 0)
+        c["weight"] = max(1, int(round((max(area, 1.0) * max(c["population"], 1)) ** 0.25)))
 
     world = {
         "source": "SINGE world map (tools/import_singe_map.py), from Natural Earth 10m Admin 0 - Countries (public domain).",
@@ -129,6 +174,8 @@ def convert(src):
 
 
 def main(argv):
+    if len(argv) == 2 and argv[0] == "--population":
+        return save_population(argv[1])
     if len(argv) != 1:
         sys.exit(__doc__)
     world, countries = convert(argv[0])

@@ -22,6 +22,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 MAP_FILE = os.path.join(HERE, "..", "game", "map", "world.js")
 COUNTRIES_FILE = os.path.join(HERE, "..", "game", "map", "countries.json")
 KM_PER_DEGREE = 111.32
+#: Places too small to have an outline on the map: a box (south, west, north, east) in
+#: degrees, so photos there are found, and photos in the country around them are kept
+#: away from them. (The map's marker points are rounded to about 5 km: too rough here.)
+TINY_MARGIN_KM = 0.3
+TINY_PLACES = {
+    "GIB": (36.108, -5.366, 36.150, -5.338),   # Gibraltar, up to the border with La Línea
+    "VAT": (41.900, 12.446, 41.9075, 12.458),  # Vatican City
+}
 
 
 def miller(lat):
@@ -119,6 +127,7 @@ class Country(object):
     def __init__(self, key, off=False):
         self.key = key
         self.off = off    # a disputed area left out of the game: photos there are skipped
+        self.tiny = False  # too small for an outline: a box from TINY_PLACES
         self.rings = []   # [(bbox, ring)]
         self.subs = []    # the region of each ring's piece of the map (Hawaii: Polynesia)
         self.area = 0.0   # in map units squared (only used to compare countries)
@@ -196,7 +205,12 @@ class WorldMap(object):
             if not key or r.get("decor") or (keys is not None and key not in keys):
                 continue
             country = self.countries.setdefault(key, Country(key, off=bool(r.get("off"))))
-            for ring in parse_path(r.get("d")):
+            rings = parse_path(r.get("d"))
+            if not rings and key in TINY_PLACES:
+                s_, w_, n_, e_ = TINY_PLACES[key]
+                rings = [[self.xy(s_, w_), self.xy(s_, e_), self.xy(n_, e_), self.xy(n_, w_)]]
+                country.tiny = True
+            for ring in rings:
                 country.add(ring, r.get("sub"))
         self.countries = {k: c for k, c in self.countries.items() if c.rings}
 
@@ -241,6 +255,8 @@ class WorldMap(object):
             home = min(inside, key=lambda c: c.area)
             if home.off:
                 return None, "in %s, which the game leaves out" % home.key
+            if home.tiny:
+                return home.key, "ok"  # inside a tiny place's box (TINY_PLACES): no border margin
         else:
             near = []
             for c in self.countries.values():
@@ -255,8 +271,9 @@ class WorldMap(object):
         for c in self.countries.values():
             if c is home:
                 continue
-            if c.distance_km(x, y, sx, sy, margin_km) is not None:
-                return None, "within %g km of %s" % (margin_km, c.key)
+            limit = TINY_MARGIN_KM if c.tiny else margin_km  # tiny places' boxes are exact: a small margin is enough
+            if c.distance_km(x, y, sx, sy, limit) is not None:
+                return None, "within %g km of %s" % (limit, c.key)
         return home.key, "ok"
 
     def piece_region(self, key, lat, lon):
