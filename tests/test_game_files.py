@@ -73,6 +73,10 @@ def test_countries_know_their_regions_continents_and_neighbours():
     assert "CUB" in c["USA"]["neighbours"] and "USA" in c["CUB"]["neighbours"]  # across water
     assert "FRA" in c["GBR"]["neighbours"] and "MYS" in c["SGP"]["neighbours"]
     assert "TUN" in c["ITA"]["neighbours"] and "AUS" not in c["TLS"]["neighbours"]
+    # How often countries come up: by the square root of their area.
+    assert 2.7 < c["BRA"]["weight"] / c["NGA"]["weight"] < 3.3
+    assert 60 < c["RUS"]["weight"] / c["LUX"]["weight"] < 100
+    assert all(info["weight"] >= 1 for info in c.values())
     for code, info in c.items():
         for n in info["neighbours"]:
             assert code in c[n]["neighbours"], (code, n)

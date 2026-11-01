@@ -108,6 +108,12 @@ def convert(src):
     neighbours = geo.find_neighbours(geo.outline_points(world_shapes, skip=R.EXCLUDED), NEIGHBOUR_KM)
     for key, c in countries.items():
         c["neighbours"] = [n for n in neighbours.get(key, []) if n in countries]
+    # How often each country comes up in a game: the square root of its area (in km),
+    # so big countries come up more often than tiny ones, but every country sometimes.
+    world_map = geo.WorldMap({"projection": m["projection"], "regions": regions})
+    for key, c in countries.items():
+        area = world_map.area_km2(key) if key in world_map.countries else 0
+        c["weight"] = max(1, int(round(math.sqrt(area))))
 
     world = {
         "source": "SINGE world map (tools/import_singe_map.py), from Natural Earth 10m Admin 0 - Countries (public domain).",
