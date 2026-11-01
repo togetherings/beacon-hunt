@@ -56,6 +56,8 @@ def test_the_map_knows_where_places_are():
 def test_regions_are_un_sub_regions():
     assert regions.countries_in("west-africa") == [
         "BEN", "BFA", "CIV", "CPV", "GHA", "GIN", "GMB", "GNB", "LBR", "MLI", "MRT", "NER", "NGA", "SEN", "SLE", "TGO"]
+    assert "HKG" in regions.countries_in("eastern-asia") and "MAC" in regions.countries_in("eastern-asia")
+    assert "GIB" not in regions.countries_in("southern-europe")
     seen = {}
     for rid in regions.REGIONS:
         for c in regions.countries_in(rid):

@@ -18,7 +18,7 @@ from . import geo
 #: Pack regions: id -> (title, [UN sub-regions], include territories).
 #: Regions made mostly of islands that belong to other countries (the
 #: Caribbean, the Pacific) include territories; the others include only UN
-#: members, observers and partly recognised countries.
+#: members, observers and partly recognised countries, plus INCLUDED_TERRITORIES.
 REGIONS = {
     "west-africa": ("West Africa", ["Western Africa"], False),
     "north-africa": ("North Africa", ["Northern Africa"], False),
@@ -55,6 +55,10 @@ CONTINENTS = {
     "east-asia": ("East and Southeast Asia", ["Eastern Asia", "South-Eastern Asia", NORTHERN_ASIA]),
     "oceania": ("Oceania", ["Australia and New Zealand", "Melanesia", "Micronesia", "Polynesia"]),
 }
+
+#: Territories that get photos even in regions that otherwise leave territories
+#: out: places with their own look and plenty of photos on Mapillary.
+INCLUDED_TERRITORIES = {"HKG", "MAC"}
 
 #: Disputed areas left out of the game, at least for now.
 EXCLUDED = {"XCR", "SAH", "CYN", "SOL"}
@@ -116,7 +120,7 @@ def countries_in(region_id, countries=None):
     _title, subs, territories = REGIONS[region_id]
     return sorted(code for code, c in countries.items()
                   if code not in EXCLUDED and c.get("sub") in subs
-                  and (territories or c.get("kind") != "territory"))
+                  and (territories or c.get("kind") != "territory" or code in INCLUDED_TERRITORIES))
 
 
 def title(region_id):
