@@ -1,0 +1,47 @@
+{
+  "format": 1,
+  "type": "free-play",
+  "id": "org.togetherings.beacon-hunt",
+  "version": "0.1.0",
+  "title": "BeaconHunt",
+  "description": "Look at a street photo from somewhere in the world and find the country it was taken in.",
+  "entry": "index.html",
+  "language": "en",
+  "requires_platform": ">=0.2",
+  "icon": "icon.svg",
+  "color": "#f5a524",
+  "service": "photo-guess",
+  "data": [
+    {
+      "name": "photo-packs"
+    }
+  ],
+  "photos": {
+    "countries": "map/countries.json"
+  },
+  "scoring": {
+    "label": "Points",
+    "order": "desc",
+    "counts": "best",
+    "tiebreak": "seconds",
+    "min": 0,
+    "max": 100000
+  },
+  "settings": [
+    {
+      "key": "region",
+      "type": "photo_region",
+      "label": "Region",
+      "help": "Photos from one region, or from every photo pack on this device.",
+      "default": "world"
+    },
+    {
+      "key": "rounds",
+      "type": "integer",
+      "label": "Photos in a game",
+      "min": 1,
+      "max": 10,
+      "default": 5
+    }
+  ]
+}

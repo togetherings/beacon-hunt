@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "beacon-hunt"
+dynamic = ["version"]
+description = "BeaconHunt's pack tool: makes photo packs from Mapillary for the BeaconHunt game in Kolibri Games."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [{ name = "Togetherings" }]
+# The pack tool uses only Python's standard library. It reads the game's map
+# (game/map), so install it from a copy of this repository: pip install -e .
+dependencies = []
+
+[project.optional-dependencies]
+# For the tests: the browser test runs the game in Kolibri Games' preview server.
+test = ["pytest", "pillow", "playwright"]
+
+[project.urls]
+Homepage = "https://github.com/togetherings/beacon-hunt"
+Issues = "https://github.com/togetherings/beacon-hunt/issues"
+
+[project.scripts]
+beacon-pack = "beacon_pack.cli:main"
+
+[tool.setuptools]
+packages = ["beacon_pack"]
+
+[tool.setuptools.dynamic]
+version = { attr = "beacon_pack.__version__" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

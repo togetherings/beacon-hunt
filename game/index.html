@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BeaconHunt</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-screen="intro">
+  <!-- Shown while playing: the round and the points so far. -->
+  <header class="hud" id="hud" hidden>
+    <span class="brand">Beacon<b>Hunt</b></span>
+    <span id="hud-round">Round 1 of 5</span>
+    <span id="hud-points" class="points">0 points</span>
+  </header>
+
+  <section id="intro" class="screen intro">
+    <img class="logo" src="icon.svg" alt="">
+    <h1>Beacon<b>Hunt</b></h1>
+    <p class="lead">Look at a street photo and find the country it was taken in.</p>
+    <ul class="rules">
+      <li>Look around the photo for clues: signs, cars, plants, roads, buildings, the weather.</li>
+      <li>Click the country on the map, then press <b>Guess</b>.</li>
+      <li>The right country gets 5,000 points. A wrong one still gets some points if it's close.</li>
+    </ul>
+    <p class="note" id="intro-rule"></p>
+    <button type="button" class="go" id="btn-start">Start</button>
+    <p class="note warn" id="intro-error" role="alert" hidden></p>
+  </section>
+
+  <main id="play" class="play" hidden>
+    <div class="photo-pane" id="photo"></div>
+    <div class="map-pane">
+      <div class="map" id="map"></div>
+      <div class="zoom" role="group" aria-label="Map zoom">
+        <button type="button" id="zoom-in" aria-label="Zoom in">+</button>
+        <button type="button" id="zoom-out" aria-label="Zoom out">&minus;</button>
+        <button type="button" id="zoom-home" aria-label="Show the whole region">&#8962;</button>
+      </div>
+      <button type="button" class="swap" id="btn-swap">Bigger map</button>
+
+      <div class="guessbar" id="guessbar">
+        <span class="pick" id="pick-name">Click a country on the map</span>
+        <button type="button" class="go" id="btn-guess" disabled>Guess</button>
+      </div>
+
+      <div class="result" id="result" role="status" hidden>
+        <div class="result-text">
+          <p class="result-title" id="result-title"></p>
+          <p id="result-detail"></p>
+          <p class="credit"><span id="credit"></span> <span class="credit-url" id="credit-url"></span></p>
+        </div>
+        <p class="result-points" id="result-points"></p>
+        <button type="button" class="go" id="btn-next">Next photo</button>
+      </div>
+    </div>
+    <p class="note warn floating" id="play-error" role="alert" hidden></p>
+  </main>
+
+  <section id="done" class="screen" hidden>
+    <h1 id="done-title"></h1>
+    <p class="lead" id="done-summary"></p>
+    <table class="table" id="rounds">
+      <thead><tr><th class="num">#</th><th>Country</th><th>Your guess</th><th class="num">Distance</th><th class="num">Points</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <p class="note" id="done-standing"></p>
+    <table class="table" id="board" hidden>
+      <caption>Scoreboard</caption>
+      <thead><tr><th class="num">#</th><th>Name</th><th class="num">Points</th><th class="num">Time</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="actions">
+      <button type="button" class="go" id="btn-again">Play again</button>
+      <button type="button" id="btn-exit">Back to games</button>
+    </div>
+    <p class="small">Photos from Mapillary contributors, CC BY-SA 4.0. Map from Natural Earth.</p>
+  </section>
+
+  <script src="__kolibri_games__/sdk.js"></script>
+  <script src="map/world.js"></script>
+  <script src="map.js"></script>
+  <script src="viewer.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
