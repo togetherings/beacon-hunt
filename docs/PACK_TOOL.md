@@ -23,6 +23,12 @@ pip install -e .
 The tool uses only Python's standard library. It reads the game's map (`game/map/`), so run it
 from this folder.
 
+**Without a virtual environment.** On Ubuntu (and WSL), `python3 -m venv` fails until you
+install `python3-venv` (`sudo apt install python3.12-venv`, with your Python's version). You can
+skip the virtual environment and the `pip install` altogether: run the tool from this folder as
+`python3 -m beacon_pack` in place of `beacon-pack`, for example
+`python3 -m beacon_pack build west-africa --out packs --zip`.
+
 ## Make a pack
 
 ```bash

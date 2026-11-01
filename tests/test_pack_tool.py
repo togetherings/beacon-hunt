@@ -147,3 +147,18 @@ def test_the_check_finds_problems(tmp_path):
     problems, _ = check.check_pack(str(pack))
     text = " ".join(problems)
     assert "not in FRA" in text and "no photo" in text and "countries don't match" in text
+
+
+def test_a_refused_license_download_isnt_blamed_on_the_token(tmp_path):
+    fake = FakeMapillary(photos())
+    def fetch(url, headers):
+        if "creativecommons.org" in url:
+            raise fake._error(url, 403)
+        return fake(url, headers)
+
+    messages = []
+    client = Client("MLY|test", pause=0, fetch=fetch, log=quiet)
+    build.build("west-africa", str(tmp_path), client, build.Options(places=3, countries=["SLE"]), log=messages.append)
+    text = " ".join(messages)
+    assert "creativecommons.org refused the download" in text and "token" not in text
+    assert build.LEGALCODE_URL in (tmp_path / "west-africa" / "LICENSE.txt").read_text()
