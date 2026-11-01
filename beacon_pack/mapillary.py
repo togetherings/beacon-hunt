@@ -29,6 +29,8 @@ IMAGE_FIELDS = ("id,geometry,computed_geometry,is_pano,camera_type,captured_at,c
                 "thumb_2048_url,width,height,sequence")
 TOKEN_ENV = "MAPILLARY_TOKEN"
 TRIES = 4
+#: Some sites (like creativecommons.org) refuse Python's default user agent.
+USER_AGENT = "beacon-pack (BeaconHunt pack tool; https://github.com/togetherings/beacon-hunt)"
 
 
 class MapillaryError(Exception):
@@ -48,7 +50,7 @@ def token_from_env():
 
 
 def _urlopen(url, headers, timeout=60):
-    req = urllib.request.Request(url, headers=headers)
+    req = urllib.request.Request(url, headers=dict(headers, **{"User-Agent": USER_AGENT}))
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return resp.read()
 
@@ -67,8 +69,12 @@ class Client(object):
         self.log = log
         self.requests = 0
 
-    def _get(self, url, headers, what):
-        """GET with retries. ``what`` names the request in messages (never the token)."""
+    def _get(self, url, headers, what, uses_token=True):
+        """GET with retries. ``what`` names the request in messages (never the token).
+
+        uses_token=False for downloads that don't send the token (photo files,
+        the license text), so a refusal isn't blamed on the token.
+        """
         delay = max(self.pause, 1.0)
         for attempt in range(TRIES):
             try:
@@ -79,6 +85,9 @@ class Client(object):
                 return data
             except urllib.error.HTTPError as e:
                 status = e.code
+                if status in (401, 403) and not uses_token:
+                    raise MapillaryError("%s refused the download (%s for %s)." % (
+                        urllib.parse.urlparse(url).netloc, status, what), status)
                 if status in (401, 403):
                     raise MapillaryError("Mapillary refused the token (%s for %s). Check %s." % (status, what, TOKEN_ENV), status)
                 if status == 404:
@@ -127,5 +136,5 @@ class Client(object):
         return json.loads(data.decode("utf-8"))
 
     def download(self, url, what):
-        """A photo file. Its address comes from the Graph API and needs no token."""
-        return self._get(url, {}, what)
+        """A file that needs no token: a photo (its address comes from the Graph API) or the license text."""
+        return self._get(url, {}, what, uses_token=False)
