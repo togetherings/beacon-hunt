@@ -41,7 +41,14 @@ The token is read from `MAPILLARY_TOKEN` and never written to a file or shown in
 Don't save it in a file inside this repository. To avoid typing it each time, put the `export`
 line in `~/.bashrc` (outside the repository).
 
-`beacon-pack regions` lists the regions and their countries.
+`beacon-pack regions` lists the regions (the UN's 20 sub-regions) and their countries.
+
+**Left out:** disputed areas (Crimea, Western Sahara, Northern Cyprus and Somaliland) and some
+territories (Jersey, Guernsey, the Isle of Man, Åland, Saint Pierre and Miquelon, Norfolk Island,
+Saint Helena and the Indian Ocean Territories) aren't in the game. They're drawn on the map but
+can't be picked, and photos taken there are skipped, never counted for a neighbouring country.
+Territories in the Caribbean and the Pacific are in, and so are Hong Kong, Macau, Greenland, the
+Faroe Islands, the Falkland Islands, Bermuda and Gibraltar.
 
 ### What it does
 
@@ -58,7 +65,12 @@ line in `~/.bashrc` (outside the repository).
    the map), author, date and download address. Photos that fail are replaced by the next one.
 4. **Downloads** the 2048-pixel version of each photo and removes any hidden data (EXIF with GPS,
    and so on).
-5. **Writes** `pack.json`, `places.json`, `LICENSE.txt` (with the full CC BY-SA 4.0 text) and
+5. **Works out how each photo is scored** in country mode: its region (where it was taken: a
+   photo in Hawaii is in Polynesia; Russia east of the Urals is Northern Asia; Indonesian Papua is
+   Melanesia), its continent, and which countries count as neighbours for it. A neighbour must
+   border the photo's country (on land, or across up to about 150 km of water) and be within
+   500 km of the photo: Cuba counts for a photo in Miami, not for one in Kansas.
+6. **Writes** `pack.json`, `places.json`, `LICENSE.txt` (with the full CC BY-SA 4.0 text) and
    `CREDITS.txt`, and with `--zip`, `packs/west-africa.zip`.
 
 You can stop it (Ctrl+C) at any time. Run the same command again and it carries on: coverage
@@ -108,7 +120,7 @@ sudo cp /media/usb/west-africa.zip /library/kolibri/kolibri_games/photo-packs/
 ```
 
 Then open Kolibri Games' **Setup** page: the photo packs panel lists the pack and anything wrong
-with it. BeaconHunt offers each pack as a region, and "the whole world" uses every pack.
+with it. BeaconHunt plays every pack's photos, on the whole world map or on a continent's map.
 
 ## The license
 

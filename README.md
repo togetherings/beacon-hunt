@@ -4,14 +4,17 @@ A geography game for [Kolibri Games](https://github.com/togetherings/kolibri-gam
 street photo (often a 360° one you can look around in) and find the country it was taken in.
 Built for offline learning on Internet-in-a-Box and other Kolibri servers.
 
-* The right country scores 5,000 points; a wrong one scores up to 4,000, less the further away it
-  is. A game has 1 to 10 photos (5 by default).
-* Coaches choose a region (West Africa, South America...) or the whole world, and can set class
-  challenges where everyone gets the same photos.
+* Two modes. **Country:** click the country; the right one scores 1,000, a country next door
+  500, one in the same part of the world (UN sub-region) 300 and one on the same continent 100.
+  **Place:** put a pin where you think the photo was taken; up to 1,000 points, fewer the further
+  away. A game has 1 to 10 photos (5 by default).
+* Maps: the whole world, or one of seven continents (Africa, Europe, North America, South
+  America, West and South Asia, East and Southeast Asia, Oceania). Coaches choose, and can set
+  class challenges where everyone gets the same photos.
 * The server keeps the answers: the browser never learns where a photo was taken until the
   learner has guessed, and hidden GPS data is removed from the photos.
 * Photos come from [Mapillary](https://www.mapillary.com) (CC BY-SA 4.0), in photo packs made
-  with this repository's pack tool, one pack per region.
+  with this repository's pack tool, one pack per UN sub-region.
 
 ## What's here
 
@@ -71,7 +74,8 @@ The game is a page in Kolibri Games' sandbox. It uses the plugin's `photo-guess`
 
 ```
 KolibriGames.start()                          -> the number of rounds and the first photo
-KolibriGames.move("guess", {country: "SLE"})  -> right or wrong, the distance, the points, the credit, the next photo
+KolibriGames.move("guess", {country: "SLE"})  -> how good the guess was, the points, the credit, the next photo
+KolibriGames.move("guess", {lat: 8.5, lon: -13.2})  -> the same, in place mode, with the distance
 KolibriGames.finish({})                       -> the server adds up the score
 ```
 
@@ -80,8 +84,11 @@ KolibriGames.finish({})                       -> the server adds up the score
   islands also appear, enlarged, in boxes under the map.
 * `game/viewer.js` shows 360° photos with a small WebGL viewer (drag, wheel or pinch, arrow keys)
   and ordinary photos with click-to-zoom.
-* `game/map/countries.json` gives each country's name and a point inside it. The server uses it
-  to score wrong guesses by distance; the pack tool uses the map to check which country each
+* `game/map/countries.json` gives each country's name, a point inside it, the regions and
+  continents it has land in, its neighbours, and its weight: (area × population)^¼, from
+  Natural Earth's populations. Country mode picks countries by the weight, place mode by its
+  square, with caps set in `kolibri-game.json`. The server uses it to score country guesses; the
+  pack tool uses the map to check which country each
   photo is in.
 
 ## License

@@ -3,10 +3,10 @@ import json
 import os
 import zipfile
 
-from . import geo
+from . import geo, regions
 from .build import FORMAT
 
-PLACE_FIELDS = ("id", "photo", "lat", "lon", "country", "pano", "credit")
+PLACE_FIELDS = ("id", "photo", "lat", "lon", "country", "pano", "credit", "region", "continent", "near")
 
 
 class _Reader(object):
@@ -78,6 +78,11 @@ def check_pack(path, margin_km=0.0):
         if where != p["country"]:
             problems.append("Place %s: the map puts it %s, not in %s." % (
                 p["id"], ("in " + where) if where else "(%s)" % why, p["country"]))
+        if regions.continent_of(p["region"]) != p["continent"]:
+            problems.append("Place %s: %s isn't on the continent %s." % (p["id"], p["region"], p["continent"]))
+        bad = [c for c in p["near"] if c not in countries.get(p["country"], {}).get("neighbours", ())]
+        if bad:
+            problems.append("Place %s: %s aren't neighbours of %s." % (p["id"], ", ".join(bad), p["country"]))
         credit = p["credit"] if isinstance(p["credit"], dict) else {}
         if not credit.get("author") or not credit.get("url"):
             problems.append("Place %s: the credit needs an author and a url." % p["id"])

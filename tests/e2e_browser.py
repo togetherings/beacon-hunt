@@ -38,20 +38,27 @@ def serve(port):
 
 
 def answers(devserver, work):
-    """The countries of the newest attempt's photos (the test peeks at the server; a learner can't)."""
+    """The newest attempt's places (the test peeks at the server; a learner can't)."""
     attempt = devserver.store._attempts[-1]
     with open(os.path.join(work, "packs", "west-africa", "places.json")) as f:
         places = {p["id"]: p for p in json.load(f)}
-    return [places[ref.split("/")[1]]["country"] for ref in attempt.state["places"]]
+    return [places[ref.split("/")[1]] for ref in attempt.state["places"]]
+
+
+def click_map(page, frame, script, arg):
+    inner = frame.locator("#map").element_handle().owner_frame()
+    pos = inner.evaluate(script, arg)
+    box = page.locator("iframe.game-frame").bounding_box()
+    page.mouse.click(box["x"] + pos["x"], box["y"] + pos["y"])
 
 
 def click_country(page, frame, code):
     """Click a country on the map at its point (where the game draws its circle if it's tiny)."""
-    handle = frame.locator("#map").element_handle()
-    inner = handle.owner_frame()
-    pos = inner.evaluate("(code) => window.BeaconHuntMap.center(code)", code)
-    box = page.locator("iframe.game-frame").bounding_box()
-    page.mouse.click(box["x"] + pos["x"], box["y"] + pos["y"])
+    click_map(page, frame, "(code) => window.BeaconHuntMap.center(code)", code)
+
+
+def click_spot(page, frame, lat, lon):
+    click_map(page, frame, "(p) => window.BeaconHuntMap.pointAt(p[0], p[1])", [lat, lon])
 
 
 def main():
@@ -78,16 +85,16 @@ def main():
             page.goto(base + "?as=amina")
             page.locator(".game", has_text="BeaconHunt").wait_for()
 
-            # The coach sets it to 3 photos from West Africa.
+            # The coach sets it to 3 photos on the Africa map, finding the country.
             page.goto(base + "?as=coach#/settings/" + GAME)
-            page.select_option("#f-g-region", label="West Africa (10 places)")
+            page.select_option("#f-g-map", label="Africa (10 photos)")
             page.locator("#f-g-rounds").fill("3")
             page.locator("button:has-text('Save settings')").click()
             page.locator("text=Settings saved.").first.wait_for()
 
             page.goto(base + "?as=amina#/play/" + GAME)
             frame = page.frame_locator("iframe.game-frame")
-            frame.locator("#intro-rule:has-text('West Africa')").wait_for()
+            frame.locator("#intro-rule:has-text('from Africa')").wait_for()
             if shots:
                 page.screenshot(path=os.path.join(shots, "1-intro.png"))
             frame.locator("#btn-start").click()
@@ -95,7 +102,7 @@ def main():
             frame.locator("#photo:not(.loading)").wait_for()
             frame.locator("#map path[data-key='SLE']").first.wait_for()
 
-            want = answers(devserver, work)
+            want = [p["country"] for p in answers(devserver, work)]
             assert len(want) == 3, want
             for i, answer in enumerate(want):
                 frame.locator("#photo:not(.loading)").wait_for()
@@ -111,7 +118,7 @@ def main():
                     page.mouse.up()
                     page.wait_for_timeout(100)
                     assert canvas.screenshot() != before, "dragging didn't turn the 360° photo"
-                guess = answer if i > 0 else ("MLI" if answer != "MLI" else "NER")
+                guess = answer if i > 0 else "KEN"   # Kenya: the same continent, nothing more
                 click_country(page, frame, guess)
                 frame.locator("#btn-guess:not([disabled])").wait_for()
                 if shots and i == 0:
@@ -120,7 +127,7 @@ def main():
                 frame.locator("#result:not([hidden])").wait_for()
                 text = frame.locator("#result").inner_text()
                 if i == 0:
-                    assert "You guessed Mali" in text or "You guessed Niger" in text, text
+                    assert "Same continent. You guessed Kenya." in text and "+100 points" in text, text
                     assert frame.locator("#map path.wrong").count() > 0
                     if shots:
                         page.screenshot(path=os.path.join(shots, "3-wrong-guess.png"))
@@ -136,7 +143,7 @@ def main():
             if shots:
                 page.screenshot(path=os.path.join(shots, "4-score.png"))
             score = int(frame.locator("#done-title").inner_text().split()[0].replace(",", ""))
-            assert 10000 < score <= 15000, score
+            assert score == 2100, score
 
             # A phone-sized screen: the photo is above the map.
             page.set_viewport_size({"width": 390, "height": 760})
@@ -148,6 +155,40 @@ def main():
             assert photo["y"] + photo["height"] <= mapbox["y"] + 1, (photo, mapbox)
             if shots:
                 page.screenshot(path=os.path.join(shots, "5-phone.png"))
+
+            # Location mode: put a pin on the photo's spot, then one about 300 km off.
+            page.set_viewport_size({"width": 1280, "height": 800})
+            page.goto(base + "?as=coach#/settings/" + GAME)
+            page.select_option("#f-g-mode", label="The exact place (put a pin on the map)")
+            page.select_option("#f-g-map", label="Africa (10 photos)")
+            page.locator("#f-g-rounds").fill("2")
+            page.locator("button:has-text('Save settings')").click()
+            page.locator("text=Settings saved.").first.wait_for()
+            page.goto(base + "?as=ben#/play/" + GAME)
+            frame = page.frame_locator("iframe.game-frame")
+            frame.locator("#intro-rule:has-text('Put a pin')").wait_for()
+            frame.locator("#btn-start").click()
+            frame.locator("#photo:not(.loading)").wait_for()
+            spots = answers(devserver, work)
+            for i, place in enumerate(spots):
+                frame.locator("#photo:not(.loading)").wait_for()
+                click_spot(page, frame, place["lat"] + (0 if i == 0 else 2.7), place["lon"])
+                frame.locator("#map .pin").wait_for()
+                frame.locator("#btn-guess:not([disabled])").wait_for()
+                frame.locator("#btn-guess").press("Enter")
+                frame.locator("#result:not([hidden])").wait_for()
+                text = frame.locator("#result").inner_text()
+                km = int(frame.locator("#result-title").inner_text().split(" km")[0].replace(",", "")) \
+                    if " km away" in text else 0
+                if i == 0:
+                    assert km < 40, text
+                    if shots:
+                        page.screenshot(path=os.path.join(shots, "6-location.png"))
+                else:
+                    assert 250 < km < 350, text
+                frame.locator("#btn-next").press("Enter")
+            frame.locator("#done:not([hidden])").wait_for()
+            assert "km away on average" in frame.locator("#done-summary").inner_text()
             browser.close()
     finally:
         server.shutdown()

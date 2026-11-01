@@ -6,11 +6,16 @@
  * does it). Small islands also appear, enlarged, in boxes under the main map
  * (the "strip"), shown only when a game can include them.
  *
- *   var map = BeaconMap.create(element, window.BEACON_MAP, {onPick: fn})
- *   map.focus(keys)            zoom to these countries and fade the rest (null: the whole world)
+ *   var map = BeaconMap.create(element, window.BEACON_MAP, {onPick: fn, onPin: fn})
+ *   map.setMode("country" | "location")   pick a country, or put a pin anywhere
+ *   map.focus(keys, bounds)    fade the countries not in keys and zoom to bounds
+ *                              ([west, south, east, north] in degrees); null: the whole world
  *   map.pick(key)              select a country (or null)
- *   map.reveal(answer, guess, lat, lon)   show the answer, the guess and the photo's spot
- *   map.clear()                back to picking
+ *   map.reveal(answer, guess, lat, lon, pin)   show the answer, the guess (a country, or
+ *                              a pin {lat, lon}) and the photo's spot
+ *   map.clear()                back to guessing
+ *
+ * Disputed areas the game leaves out ("off" on the map) are drawn but can't be picked.
  *
  * Countries are known by their code ("key", e.g. SLE). Parts of a country that
  * are drawn separately (Alaska, the Canary Islands...) have their country's key.
@@ -42,9 +47,15 @@
     opts = opts || {};
     var W = data.size[0], H = data.size[1], K = data.projection.k, TOP = miller(data.projection.lat_top);
     var byKey = {};            // key -> [path elements] (main map, boxes and circles)
-    var picked = null, revealed = false, inPlay = null;
+    var picked = null, revealed = false, inPlay = null, mode = "country", pin = null;
 
     function xy(lat, lon) { return [(lon + 180) * K, (TOP - miller(lat)) * K]; }
+    function millerInverse(m) {
+      return (Math.atan(Math.exp(0.8 * m * Math.PI / 180)) - Math.PI / 4) / 0.4 * 180 / Math.PI;
+    }
+    function latLon(x, y) {          // the inverse of xy()
+      return { lat: millerInverse(TOP - y / K), lon: ((x / K - 180) + 540) % 360 - 180 };
+    }
 
     // ---------------------------------------------------------- drawing
 
@@ -58,9 +69,9 @@
     var marks = el("g", { "class": "marks" }, svg);
 
     function addShape(parent, r, d, s) {
-      var cls = "country" + (r.decor ? " decor" : "") + (s ? " nostroke" : "");
+      var cls = "country" + (r.decor ? " decor" : "") + (r.off ? " off" : "") + (s ? " nostroke" : "");
       var p = el("path", { d: d, "class": cls }, parent);
-      if (r.key && !r.decor) {
+      if (r.key && !r.decor && !r.off) {
         p.setAttribute("data-key", r.key);
         (byKey[r.key] = byKey[r.key] || []).push(p);
       }
@@ -71,7 +82,7 @@
     var tiny = [];
     data.regions.forEach(function (r) {
       if (r.d) addShape(land, r, r.d, r.s);
-      if (r.key && !r.decor && r.mk && r.small) tiny.push(r);
+      if (r.key && !r.decor && !r.off && r.mk && r.small) tiny.push(r);
     });
     (data.lakes || []).forEach(function (l) { el("path", { d: l.d, "class": "lake" }, land); });
     tiny.forEach(function (r) {
@@ -91,7 +102,7 @@
         data.regions.forEach(function (r) {
           pieces(r.ins && r.ins[ins.id]).forEach(function (p) {
             if (p.d) addShape(g, r, p.d, p.s);
-            if (p.mk && r.key && !r.decor) {
+            if (p.mk && r.key && !r.decor && !r.off) {
               var c = el("circle", { cx: p.mk[0], cy: p.mk[1], r: 12, "class": "tiny fixed", "data-key": r.key }, g);
               (byKey[r.key] = byKey[r.key] || []).push(c);
             }
@@ -227,8 +238,41 @@
       }
       return null;
     }
+    // Where a click is, in degrees: on the main map, or in one of the island boxes.
+    function clickLatLon(e) {
+      var target = e.target, inStrip = strip && (target === strip || target.ownerSVGElement === strip);
+      if (!inStrip) {
+        var m = toMap(e.clientX, e.clientY);
+        return latLon(m.x, m.y);
+      }
+      var pt = strip.createSVGPoint();
+      pt.x = e.clientX; pt.y = e.clientY;
+      var q = pt.matrixTransform(strip.getScreenCTM().inverse());
+      for (var i = 0; i < data.insets.length; i++) {
+        var ins = data.insets[i];
+        if (q.x >= ins.x && q.x <= ins.x + ins.w && q.y >= ins.y && q.y <= ins.y + ins.h) {
+          var lon = ins.lon0 + (q.x - ins.x) / ins.s;
+          return { lat: millerInverse(miller(ins.lat1) - (q.y - ins.y) / ins.s), lon: ((lon + 540) % 360) - 180 };
+        }
+      }
+      return null;
+    }
+    function drawPin(lat, lon) {
+      marks.innerHTML = "";
+      var p = xy(lat, lon);
+      el("circle", { cx: p[0], cy: p[1], r: 6, "class": "pin", "data-px": 7 }, marks);
+      sizeCircles();
+    }
     box.addEventListener("click", function (e) {
       if (moved || revealed) return;
+      if (mode === "location") {
+        var at = clickLatLon(e);
+        if (!at) return;
+        pin = at;
+        drawPin(at.lat, at.lon);
+        if (opts.onPin) opts.onPin(at.lat, at.lon);
+        return;
+      }
       var key = keyAt(e.target);
       if (key) {
         pick(key);
@@ -237,7 +281,7 @@
     });
     box.addEventListener("pointermove", function (e) {
       if (e.pointerType === "touch" || count()) return;
-      var key = keyAt(e.target);
+      var key = mode === "country" ? keyAt(e.target) : null;
       if (!key) { tip.hidden = true; return; }
       var r = box.getBoundingClientRect();
       tip.textContent = nameOf(key);
@@ -256,8 +300,8 @@
       if (key) mark(key, "picked", true);
     }
 
-    // Zoom to some countries (a region's game) and fade the others.
-    function focus(keys) {
+    // Fade the countries not in play and zoom to the map's area (a continent's game).
+    function focus(keys, bounds) {
       inPlay = keys && keys.length ? keys : null;
       var x0 = W, y0 = H, x1 = 0, y1 = 0;
       Object.keys(byKey).forEach(function (key) {
@@ -272,6 +316,10 @@
         });
       });
       home = inPlay && x1 > x0 ? [x0, y0, x1, y1] : [0, 0, W, H];
+      if (bounds) {
+        var a = xy(bounds[3], bounds[0]), b = xy(bounds[1], bounds[2]);
+        home = [a[0], a[1], b[0], b[1]];
+      }
       // The island boxes only when some country in play is in them.
       if (strip) strip.style.display = !inPlay || inPlay.some(function (k) {
         return (byKey[k] || []).some(function (p) { return p.ownerSVGElement === strip; });
@@ -280,7 +328,7 @@
     }
 
     // After a guess: the right country, the guess (if wrong) and a beacon where the photo was taken.
-    function reveal(answer, guess, lat, lon) {
+    function reveal(answer, guess, lat, lon, guessPin) {
       revealed = true;
       box.classList.add("revealed");
       tip.hidden = true;
@@ -288,7 +336,12 @@
       if (guess && guess !== answer) mark(guess, "wrong", true);
       marks.innerHTML = "";
       var p = xy(lat, lon), pts = [p];
-      if (guess && guess !== answer && data.countries[guess]) {
+      if (guessPin) {
+        var g0 = xy(guessPin.lat, guessPin.lon);
+        el("line", { x1: g0[0], y1: g0[1], x2: p[0], y2: p[1], "class": "guessline", "data-px": 2 }, marks);
+        el("circle", { cx: g0[0], cy: g0[1], r: 6, "class": "pin", "data-px": 7 }, marks);
+        pts.push(g0);
+      } else if (guess && guess !== answer && data.countries[guess]) {
         var g = data.countries[guess], q = xy(g.lat, g.lon);
         el("line", { x1: q[0], y1: q[1], x2: p[0], y2: p[1], "class": "guessline", "data-px": 2 }, marks);
         pts.push(q);
@@ -308,6 +361,7 @@
       marks.innerHTML = "";
       Object.keys(byKey).forEach(function (k) { mark(k, "answer", false); mark(k, "wrong", false); });
       pick(null);
+      pin = null;
       reset();
     }
 
@@ -317,6 +371,11 @@
       zoomIn: function () { zoomBy(ZOOM_STEP); },
       zoomOut: function () { zoomBy(1 / ZOOM_STEP); },
       reset: reset, focus: focus, pick: pick, reveal: reveal, clear: clear, nameOf: nameOf,
+      setMode: function (m) { mode = m === "location" ? "location" : "country"; box.setAttribute("data-mode", mode); },
+      pointAt: function (lat, lon) {   // where a spot is, in screen pixels (for tests)
+        var p = xy(lat, lon), m = svg.getScreenCTM();
+        return { x: m.a * p[0] + m.e, y: m.d * p[1] + m.f };
+      },
       has: function (key) { return !!byKey[key]; },
       center: function (key) {     // where a country's circle or point is, in screen pixels (for tests)
         var c = data.countries[key], p = xy(c.lat, c.lon), m = svg.getScreenCTM();

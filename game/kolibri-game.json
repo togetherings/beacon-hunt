@@ -4,7 +4,7 @@
   "id": "org.togetherings.beacon-hunt",
   "version": "0.1.0",
   "title": "BeaconHunt",
-  "description": "Look at a street photo from somewhere in the world and find the country it was taken in.",
+  "description": "Look at a street photo from somewhere in the world and find the country, or the exact place, it was taken in.",
   "entry": "index.html",
   "language": "en",
   "requires_platform": ">=0.2",
@@ -17,7 +17,55 @@
     }
   ],
   "photos": {
-    "countries": "map/countries.json"
+    "countries": "map/countries.json",
+    "maps": [
+      {
+        "id": "world",
+        "title": "The whole world",
+        "scale_km": 1500
+      },
+      {
+        "id": "africa",
+        "title": "Africa",
+        "scale_km": 600
+      },
+      {
+        "id": "europe",
+        "title": "Europe",
+        "scale_km": 300
+      },
+      {
+        "id": "north-america",
+        "title": "North America",
+        "scale_km": 600
+      },
+      {
+        "id": "south-america",
+        "title": "South America",
+        "scale_km": 500
+      },
+      {
+        "id": "west-south-asia",
+        "title": "West and South Asia",
+        "scale_km": 500
+      },
+      {
+        "id": "east-asia",
+        "title": "East and Southeast Asia",
+        "scale_km": 600
+      },
+      {
+        "id": "oceania",
+        "title": "Oceania",
+        "scale_km": 600
+      }
+    ],
+    "weights": {
+      "country": 1,
+      "location": 2
+    },
+    "max_share": 0.05,
+    "max_photo_ratio": 3
   },
   "scoring": {
     "label": "Points",
@@ -25,14 +73,30 @@
     "counts": "best",
     "tiebreak": "seconds",
     "min": 0,
-    "max": 100000
+    "max": 10000
   },
   "settings": [
     {
-      "key": "region",
-      "type": "photo_region",
-      "label": "Region",
-      "help": "Photos from one region, or from every photo pack on this device.",
+      "key": "mode",
+      "type": "choice",
+      "label": "Guess",
+      "default": "country",
+      "choices": [
+        {
+          "value": "country",
+          "label": "The country"
+        },
+        {
+          "value": "location",
+          "label": "The exact place (put a pin on the map)"
+        }
+      ]
+    },
+    {
+      "key": "map",
+      "type": "photo_map",
+      "label": "Map",
+      "help": "The whole world, or one continent.",
       "default": "world"
     },
     {

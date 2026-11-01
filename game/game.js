@@ -1,45 +1,46 @@
-/* BeaconHunt: look at a street photo and guess which country it was taken in.
+/* BeaconHunt: look at a street photo and find where it was taken.
  *
  * The Kolibri Games server ("photo-guess" service) does the real work: it
  * picks the photos from the device's photo packs, sends one round at a time,
  * and only says where a photo was taken after the guess. This page shows the
  * photo and the map and passes on the learner's guess:
  *
- *   KolibriGames.start()                         the rounds and the first photo
- *   KolibriGames.move("guess", {country: "SLE"}) the answer, the points and the next photo
- *   KolibriGames.finish({})                      the server adds up the points
+ *   KolibriGames.start()                                the rounds and the first photo
+ *   KolibriGames.move("guess", {country: "SLE"})        country mode
+ *   KolibriGames.move("guess", {lat: 8.5, lon: -13.2})  location mode
+ *   KolibriGames.finish({})                             the server adds up the points
+ *
+ * The game's "map" setting is the whole world or one continent, and "mode"
+ * is country or location (see kolibri-game.json).
  */
 (function () {
   "use strict";
   var KG = window.KolibriGames;
   var $ = function (id) { return document.getElementById(id); };
 
-  // The UN sub-regions in each region's photo pack (the same as beacon_pack/regions.py).
-  // The map zooms to the region and fades the rest of the world.
-  var REGIONS = {
-    "west-africa": ["Western Africa"],
-    "north-africa": ["Northern Africa"],
-    "east-africa": ["Eastern Africa"],
-    "central-africa": ["Middle Africa"],
-    "southern-africa": ["Southern Africa"],
-    "northern-america": ["Northern America"],
-    "central-america": ["Central America"],
-    "caribbean": ["Caribbean"],
-    "south-america": ["South America"],
-    "northern-europe": ["Northern Europe"],
-    "western-europe": ["Western Europe"],
-    "southern-europe": ["Southern Europe"],
-    "eastern-europe": ["Eastern Europe"],
-    "western-asia": ["Western Asia"],
-    "central-asia": ["Central Asia"],
-    "southern-asia": ["Southern Asia"],
-    "eastern-asia": ["Eastern Asia"],
-    "south-eastern-asia": ["South-Eastern Asia"],
-    "oceania": ["Australia and New Zealand"],
-    "pacific-islands": ["Melanesia", "Micronesia", "Polynesia"]
+  // The continents (the same as beacon_pack/regions.py and kolibri-game.json): the area
+  // each map shows, [west, south, east, north] in degrees. Countries with land on the
+  // continent are bright; the rest of the world is faded but still there.
+  var CONTINENTS = {
+    "africa": { title: "Africa", bounds: [-26, -36, 60, 38] },
+    "europe": { title: "Europe", bounds: [-25, 34, 65, 72] },
+    "north-america": { title: "North America", bounds: [-170, 5, -15, 78] },
+    "south-america": { title: "South America", bounds: [-92, -56, -30, 13] },
+    "west-south-asia": { title: "West and South Asia", bounds: [25, -2, 98, 56] },
+    "east-asia": { title: "East and Southeast Asia", bounds: [60, -12, 180, 78] },
+    "oceania": { title: "Oceania", bounds: [110, -50, 180, 10] }
   };
 
-  var S = { info: null, state: null, guess: null, busy: false, map: null, viewer: null, region: "world" };
+  // What a country guess earned (the server decides; see kolibri_games/photoguess.py).
+  var TIERS = {
+    right: "Right!",
+    neighbour: "Close: next door.",
+    region: "Same part of the world.",
+    continent: "Same continent.",
+    none: "Not this time."
+  };
+
+  var S = { info: null, state: null, guess: null, busy: false, map: null, viewer: null };
 
   // ------------------------------------------------------------------ helpers
 
@@ -62,22 +63,20 @@
     e.hidden = !text;
   }
 
-  // The countries of a region, as the pack tool picks them: territories only in
-  // the island regions (the Caribbean and the Pacific). null: the whole world.
-  function regionCountries(id) {
-    var subs = REGIONS[id];
-    if (!subs) return null;
-    var islands = id === "caribbean" || id === "pacific-islands", countries = window.BEACON_MAP.countries;
-    return Object.keys(countries).filter(function (k) {
-      var c = countries[k];
-      return subs.indexOf(c.sub) >= 0 && (islands || c.kind !== "territory");
-    });
+  function mapTitle(id) {
+    return CONTINENTS[id] ? CONTINENTS[id].title : "the whole world";
   }
 
-  function regionTitle(id) {
-    if (!id || id === "world") return "the whole world";
-    return id.split("-").map(function (w) { return w.charAt(0).toUpperCase() + w.slice(1); }).join(" ");
+  // Show the game's map: the whole world, or a continent with the rest faded.
+  function focusMap(id) {
+    var c = CONTINENTS[id], countries = window.BEACON_MAP.countries;
+    if (!c) return S.map.focus(null);
+    S.map.focus(Object.keys(countries).filter(function (k) {
+      return (countries[k].continents || []).indexOf(id) >= 0;
+    }), c.bounds);
   }
+
+  function isLocation() { return S.state && S.state.mode === "location"; }
 
   // ------------------------------------------------------------------ rounds
 
@@ -94,7 +93,7 @@
     S.guess = null;
     $("result").hidden = true;
     $("guessbar").hidden = false;
-    $("pick-name").textContent = "Click a country on the map";
+    $("pick-name").textContent = isLocation() ? "Click the map where you think it is" : "Click a country on the map";
     $("btn-guess").disabled = true;
     S.map.clear();
     error("play", "");
@@ -108,12 +107,21 @@
     $("btn-guess").disabled = false;
   }
 
+  function onPin(lat, lon) {
+    if (S.busy || !$("result").hidden) return;
+    S.guess = { lat: lat, lon: lon };
+    $("pick-name").textContent = "Your pin: " + Math.abs(lat).toFixed(1) + "°" + (lat < 0 ? "S" : "N") + ", " +
+      Math.abs(lon).toFixed(1) + "°" + (lon < 0 ? "W" : "E");
+    $("btn-guess").disabled = false;
+  }
+
   function guess() {
     if (S.busy || !S.guess) return;
     S.busy = true;
     $("btn-guess").disabled = true;
     error("play", "");
-    KG.move("guess", { country: S.guess }).then(function (reply) {
+    var data = isLocation() ? S.guess : { country: S.guess };
+    KG.move("guess", data).then(function (reply) {
       S.state = reply;
       drawResult(reply.result, reply.done);
     }).catch(function (e) {
@@ -126,10 +134,16 @@
   function drawResult(r, done) {
     $("guessbar").hidden = true;
     $("result").hidden = false;
-    $("result").className = "result " + (r.correct ? "right" : "wrong");
-    $("result-title").textContent = r.correct ? "Right! It's " + r.answer_name + "." : "It's " + r.answer_name + ".";
-    $("result-detail").textContent = r.correct ? "Well spotted." :
-      "You guessed " + r.guess_name + ", about " + num(r.distance_km) + " km away.";
+    var good = isLocation() ? r.points >= 500 : r.tier === "right";
+    $("result").className = "result " + (good ? "right" : "wrong");
+    if (isLocation()) {
+      $("result-title").textContent = (r.distance_km < 1 ? "Spot on" : num(r.distance_km) + " km away") +
+        ". It's in " + r.answer_name + ".";
+      $("result-detail").textContent = r.points >= 900 ? "Brilliant!" : r.points >= 500 ? "Good guess." : "";
+    } else {
+      $("result-title").textContent = r.tier === "right" ? "Right! It's " + r.answer_name + "." : "It's " + r.answer_name + ".";
+      $("result-detail").textContent = r.tier === "right" ? "Well spotted." : TIERS[r.tier] + " You guessed " + r.guess_name + ".";
+    }
     $("result-points").textContent = "+" + num(r.points) + " points";
     var c = r.credit || {};
     $("credit").textContent = "Photo by " + (c.author || "unknown") + " on " + (c.source || "Mapillary") +
@@ -138,7 +152,7 @@
     $("btn-next").textContent = done ? "See your score" : "Next photo";
     drawHud();
     $("hud-round").textContent = "Round " + r.round + " of " + S.state.rounds;
-    S.map.reveal(r.answer, r.guess, r.lat, r.lon);
+    S.map.reveal(r.answer, r.guess, r.lat, r.lon, isLocation() ? { lat: r.guess_lat, lon: r.guess_lon } : null);
     $("btn-next").focus();
   }
 
@@ -156,11 +170,12 @@
       S.state = res.public;
       show("play");
       if (!S.map) {
-        S.map = BeaconMap.create($("map"), window.BEACON_MAP, { onPick: onPick });
+        S.map = BeaconMap.create($("map"), window.BEACON_MAP, { onPick: onPick, onPin: onPin });
         S.viewer = BeaconViewer.create($("photo"));
         window.BeaconHuntMap = S.map;   // for the browser test and for debugging in the console
       }
-      S.map.focus(regionCountries(S.region));
+      S.map.setMode(S.state.mode);
+      focusMap(S.state.map);
       if (S.state.done) return finish();
       drawRound();
     }).catch(function (e) {
@@ -172,18 +187,21 @@
     return KG.finish({}).then(function (res) {
       var a = res.attempt, d = a.detail || {};
       $("done-title").textContent = num(a.score) + " points";
-      $("done-summary").textContent = "You found " + (d.correct || 0) + " of " + (d.rounds || []).length +
-        " countries" + (a.seconds ? " in " + clock(a.seconds) : "") + ".";
+      var location = d.mode === "location", time = a.seconds ? " in " + clock(a.seconds) : "";
+      $("done-summary").textContent = location
+        ? "Your pins were " + num(d.average_km) + " km away on average" + time + "."
+        : "You found " + (d.correct || 0) + " of " + (d.rounds || []).length + " countries" + time + ".";
+      $("rounds-guess").textContent = location ? "Distance" : "Your guess";
       var body = $("rounds").querySelector("tbody");
       body.innerHTML = "";
       (d.rounds || []).forEach(function (r) {
         var tr = document.createElement("tr");
-        tr.className = r.correct ? "right" : "wrong";
-        [r.round, r.answer_name, r.correct ? "Right" : r.guess_name, r.correct ? "" : num(r.distance_km) + " km",
-         num(r.points)].forEach(function (v, i) {
+        tr.className = r.correct || (location && r.points >= 500) ? "right" : "wrong";
+        var guessed = location ? num(r.distance_km) + " km" : r.correct ? "Right" : r.guess_name;
+        [r.round, r.answer_name, guessed, num(r.points)].forEach(function (v, i) {
           var td = document.createElement("td");
           td.textContent = v;
-          if (i === 0 || i >= 3) td.className = "num";
+          if (i === 0 || i === 3) td.className = "num";
           tr.appendChild(td);
         });
         body.appendChild(tr);
@@ -255,10 +273,12 @@
       return;
     }
     var settings = info.settings || {}, c = info.challenge;
-    S.region = settings.region || "world";
     var bits = [];
     if (c) bits.push("Challenge: " + c.title + ".");
-    bits.push((settings.rounds || 5) + " photos from " + regionTitle(S.region) + ".");
+    bits.push((settings.rounds || 5) + " photos from " + mapTitle(settings.map) + ".");
+    bits.push(settings.mode === "location"
+      ? "Put a pin where you think each photo was taken: the closer, the more points."
+      : "Find the country each photo was taken in.");
     if (info.rules && info.rules.time_limit) bits.push("You have " + Math.round(info.rules.time_limit / 60) + " minutes.");
     $("intro-rule").textContent = bits.join(" ");
   }).catch(function (err) { error("intro", err.message); });

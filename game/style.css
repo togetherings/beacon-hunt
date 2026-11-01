@@ -111,6 +111,12 @@ body.big-map .play { grid-template-columns: 2fr 3fr; }
 .bmap .outline { fill: none; stroke: var(--border); stroke-width: 0.8; vector-effect: non-scaling-stroke; pointer-events: none; }
 .bmap .lake { fill: var(--sea); pointer-events: none; }
 .bmap .decor { pointer-events: none; }
+/* Disputed areas the game leaves out: hatched, and can't be picked. */
+.bmap .off { fill: #a7a196; pointer-events: none; }
+.bmap[data-mode="location"] svg.world, .bmap[data-mode="location"] svg.strip { cursor: crosshair; }
+.bmap[data-mode="location"] .country:hover { fill: var(--land); }
+.bmap[data-mode="location"] .faded:hover { fill: var(--land-faded); }
+.bmap .pin { fill: #fff; stroke: #1b1300; stroke-width: 2; vector-effect: non-scaling-stroke; }
 .bmap .faded { fill: var(--land-faded); }
 .bmap .country:hover { fill: #fff3d6; }
 .bmap .faded:hover { fill: #8d97a8; }
