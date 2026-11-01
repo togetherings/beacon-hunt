@@ -41,6 +41,8 @@ LICENSE_URL = "https://creativecommons.org/licenses/by-sa/4.0/"
 LEGALCODE_URL = "https://creativecommons.org/licenses/by-sa/4.0/legalcode.txt"
 PHOTO_URL = "https://www.mapillary.com/app/?pKey=%s"
 MIN_WIDTH = 1000  # skip photos smaller than this (the 2048 version would be blown up)
+#: A neighbouring country counts for a photo only if it's within this distance of the photo.
+NEAR_KM = 500.0
 
 
 class BuildError(Exception):
@@ -200,7 +202,35 @@ def spread(world, candidates, quota, rng):
 # ---------------------------------------------------------------- 3. check
 
 
-def check_photo(world, info, code, margin_km, pano_only):
+class Scoring(object):
+    """Works out each photo's region, continent and neighbours, for country-mode scoring.
+
+    * region: where the photo was taken (regions.photo_region)
+    * continent: the region's continent
+    * near: the photo's country's neighbours (sharing a border or close
+      across water, from countries.json) that are within NEAR_KM of the photo
+    """
+
+    def __init__(self, world, countries=None):
+        self.world = world
+        self.countries = countries or geo.load_countries()
+        self._index = None
+
+    def index(self):
+        if self._index is None:  # built when first needed: it takes a few seconds
+            self._index = geo.PointIndex(geo.outline_points(geo.load_map(), skip=regions.EXCLUDED))
+        return self._index
+
+    def fields(self, code, lat, lon):
+        region = regions.photo_region(code, self.world.piece_region(code, lat, lon), lat, lon)
+        neighbours = set(self.countries.get(code, {}).get("neighbours", ()))
+        close = self.index().near(lat, lon, NEAR_KM, skip=code) if neighbours else {}
+        return {"region": region, "continent": regions.continent_of(region),
+                "near": sorted(c for c in close if c in neighbours)}
+
+
+
+def check_photo(world, info, code, margin_km, pano_only, scoring=None):
     """(place, None) if a photo can be used for country ``code``, else (None, reason)."""
     geom = info.get("computed_geometry") or info.get("geometry") or {}
     coords = geom.get("coordinates") if isinstance(geom, dict) else None
@@ -238,10 +268,11 @@ def check_photo(world, info, code, margin_km, pano_only):
             "captured": date,
         },
     }
+    place.update((scoring or Scoring(world)).fields(code, lat, lon))
     return place, None
 
 
-def choose(client, world, ordered, quota, opts, checked, save, log):
+def choose(client, world, ordered, quota, opts, checked, save, log, scoring=None):
     """{country: [place]}: the first photos on each country's list that pass the check."""
     chosen = {}
     calls = 0
@@ -267,7 +298,7 @@ def choose(client, world, ordered, quota, opts, checked, save, log):
                     save()
             if "error" in info:
                 continue
-            place, _why = check_photo(world, info, code, opts.margin_km, opts.pano_only)
+            place, _why = check_photo(world, info, code, opts.margin_km, opts.pano_only, scoring)
             if place:
                 got.append(place)
                 sequences.add(cand["sequence"])
@@ -399,7 +430,8 @@ def build(region_id, out_dir, client, opts=None, log=print, today=None):
     checked_path = os.path.join(build_dir, "checked.json")
     checked = _load_json(checked_path, {})
     log("Check: asking Mapillary about the picked photos")
-    chosen = choose(client, world, ordered, quota, opts, checked, lambda: _save_json(checked_path, checked), log)
+    chosen = choose(client, world, ordered, quota, opts, checked, lambda: _save_json(checked_path, checked), log,
+                    Scoring(world))
     places = [p for c in sorted(chosen) for p in chosen[c]]
     short = opts.places - len(places)
     if short > 0:

@@ -19,7 +19,7 @@ def test_the_manifest_matches_the_photo_guess_service():
     assert m["version"] == __version__, "the game and the pack tool share a version"
     assert m["service"] == "photo-guess" and m["data"] == [{"name": "photo-packs"}]
     assert os.path.exists(os.path.join(GAME, m["photos"]["countries"]))
-    assert {s["key"]: s["type"] for s in m["settings"]} == {"region": "photo_region", "rounds": "integer"}
+    assert {s["key"]: s["type"] for s in m["settings"]} == {"mode": "choice", "map": "photo_map", "rounds": "integer"}
     for name in (m["entry"], m["icon"]):
         assert os.path.exists(os.path.join(GAME, name))
 
@@ -50,13 +50,46 @@ def test_every_country_can_be_scored_and_drawn():
         assert m.countries[code].contains(*m.xy(countries[code]["lat"], countries[code]["lon"])), code
 
 
-def test_the_game_knows_the_same_regions_as_the_pack_tool():
+def test_the_game_knows_the_same_continents_as_the_pack_tool():
+    m = json.loads(read("game", "kolibri-game.json"))
+    maps = {x["id"]: x["title"] for x in m["photos"]["maps"]}
+    assert maps.pop("world") == "The whole world"
+    assert maps == {cid: title for cid, (title, _subs) in regions.CONTINENTS.items()}
     js = read("game", "game.js")
-    block = js[js.index("var REGIONS = {"):js.index("};", js.index("var REGIONS = {"))]
-    in_game = {k: re.findall(r'"([^"]+)"', v) for k, v in re.findall(r'"([a-z-]+)": \[([^\]]*)\]', block)}
-    assert in_game == {rid: subs for rid, (_t, subs, _terr) in regions.REGIONS.items()}
-    islands = re.search(r'islands = (.*?),', js).group(1)
-    assert sorted(re.findall(r'"([a-z-]+)"', islands)) == sorted(r for r, v in regions.REGIONS.items() if v[2])
+    block = js[js.index("var CONTINENTS = {"):js.index("};", js.index("var CONTINENTS = {"))]
+    assert dict(re.findall(r'"([a-z-]+)": \{ title: "([^"]+)"', block)) == maps
+    # Every UN sub-region is on exactly one continent.
+    subs = [s for _t, subs in regions.CONTINENTS.values() for s in subs]
+    assert len(subs) == len(set(subs))
+    assert {c["sub"] for c in geo.load_countries().values()} - set(subs) == {"Seven seas (open ocean)"}
+
+
+def test_countries_know_their_regions_continents_and_neighbours():
+    c = geo.load_countries()
+    assert not regions.EXCLUDED & set(c), "disputed areas are left out"
+    assert c["RUS"]["continents"] == ["east-asia", "europe"] and "Northern Asia" in c["RUS"]["regions"]
+    assert c["IDN"]["continents"] == ["east-asia", "oceania"] and c["TLS"]["continents"] == ["east-asia"]
+    assert "south-america" in c["FRA"]["continents"]  # French Guiana
+    assert "CUB" in c["USA"]["neighbours"] and "USA" in c["CUB"]["neighbours"]  # across water
+    assert "FRA" in c["GBR"]["neighbours"] and "MYS" in c["SGP"]["neighbours"]
+    assert "TUN" in c["ITA"]["neighbours"] and "AUS" not in c["TLS"]["neighbours"]
+    for code, info in c.items():
+        for n in info["neighbours"]:
+            assert code in c[n]["neighbours"], (code, n)
+
+
+def test_where_russia_and_indonesia_are_split():
+    assert regions.photo_region("RUS", "Eastern Europe", 55.75, 37.6) == "Eastern Europe"      # Moscow
+    assert regions.photo_region("RUS", "Eastern Europe", 56.8, 60.6) == "Northern Asia"       # Yekaterinburg
+    assert regions.photo_region("RUS", "Eastern Europe", 64.7, 177.5) == "Northern Asia"      # Anadyr
+    assert regions.photo_region("RUS", "Eastern Europe", 66.0, -170.0) == "Northern Asia"     # Chukotka, past 180°
+    papua = [(-2.53, 140.7), (-0.88, 131.25), (-0.2, 130.5), (-1.9, 130.0), (-8.5, 140.4), (-1.0, 136.1), (-3.1, 133.0)]
+    rest = [(-3.7, 128.18), (-3.1, 130.5), (0.8, 127.4), (-0.2, 129.4), (-5.6, 132.7), (-6.2, 134.4), (-7.6, 131.4),
+            (-8.56, 125.57), (-6.2, 106.8), (1.5, 124.8)]
+    assert all(regions.in_papua(lat, lon) for lat, lon in papua)
+    assert not any(regions.in_papua(lat, lon) for lat, lon in rest)
+    assert regions.photo_region("IDN", "South-Eastern Asia", -2.53, 140.7) == "Melanesia"
+    assert regions.photo_region("FRA", "South America", 4.93, -52.33) == "South America"
 
 
 def test_metadata_stripping_matches_kolibri_games():

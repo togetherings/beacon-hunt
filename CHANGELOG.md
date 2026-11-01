@@ -4,9 +4,12 @@
 
 First version. Needs Kolibri Games 0.2.0 or later.
 
-- The game: a street photo (360° photos can be looked around), a world map to pick the country,
-  and the answer with the distance, the points and the photo's credit. 1 to 10 photos a game.
-- Regions: coaches choose one region's photo pack or the whole world. The map zooms to the region.
+- The game: a street photo (360° photos can be looked around) and a world map. Two modes: find
+  the country (1,000 points, or 500 for a country next door, 300 for the same region, 100 for the
+  same continent) or put a pin on the place (up to 1,000 points, fewer the further away).
+- Maps: the whole world or one of seven continents. Disputed areas are left out for now.
+- After each guess: the answer on the map, the points and the photo's credit. 1 to 10 photos a game.
 - The pack tool, `beacon-pack`: makes a region's photo pack from Mapillary, spread over the
-  region's countries and away from borders, with the photos' credits and license.
+  region's countries and away from borders, with the photos' credits and license, and each
+  photo's region, continent and neighbouring countries for scoring.
 - The world map comes from SINGE (Natural Earth borders).

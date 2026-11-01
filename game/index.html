@@ -17,11 +17,12 @@
   <section id="intro" class="screen intro">
     <img class="logo" src="icon.svg" alt="">
     <h1>Beacon<b>Hunt</b></h1>
-    <p class="lead">Look at a street photo and find the country it was taken in.</p>
+    <p class="lead">Look at a street photo and find where in the world it was taken.</p>
     <ul class="rules">
       <li>Look around the photo for clues: signs, cars, plants, roads, buildings, the weather.</li>
-      <li>Click the country on the map, then press <b>Guess</b>.</li>
-      <li>The right country gets 5,000 points. A wrong one still gets some points if it's close.</li>
+      <li>Click the map, then press <b>Guess</b>. Each photo is worth up to 1,000 points.</li>
+      <li>Finding the country: the right one gets 1,000, a country next door 500, the same part of the
+        world 300 and the same continent 100. Finding the place: the closer your pin, the more points.</li>
     </ul>
     <p class="note" id="intro-rule"></p>
     <button type="button" class="go" id="btn-start">Start</button>
@@ -61,7 +62,7 @@
     <h1 id="done-title"></h1>
     <p class="lead" id="done-summary"></p>
     <table class="table" id="rounds">
-      <thead><tr><th class="num">#</th><th>Country</th><th>Your guess</th><th class="num">Distance</th><th class="num">Points</th></tr></thead>
+      <thead><tr><th class="num">#</th><th>Country</th><th id="rounds-guess">Your guess</th><th class="num">Points</th></tr></thead>
       <tbody></tbody>
     </table>
     <p class="note" id="done-standing"></p>

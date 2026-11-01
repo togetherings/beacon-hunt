@@ -98,6 +98,11 @@ def test_a_pack_is_built_and_passes_its_check(tmp_path):
     assert not any(abs(p["lat"] - 9.92) < 0.01 or p["lat"] > 40 for p in places)  # border, France skipped
     p = places[0]
     assert p["photo"] == "photos/%s.jpg" % p["id"]
+    assert all(x["region"] == "Western Africa" and x["continent"] == "africa" for x in places)
+    near = {x["country"]: set() for x in places}
+    for x in places:
+        near[x["country"]].update(x["near"])
+    assert near["SLE"] <= {"GIN", "LBR"} and "GIN" in near["SLE"] and "CIV" in near["LBR"]
     assert p["credit"]["url"] == "https://www.mapillary.com/app/?pKey=" + p["id"]
     assert p["credit"]["license"] == "CC BY-SA 4.0" and p["credit"]["captured"] == "2023-07-22"
     photo = (pack / p["photo"]).read_bytes()

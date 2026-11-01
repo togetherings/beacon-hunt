@@ -12,7 +12,8 @@ Writes:
                            small islands. A script (window.BEACON_MAP = {...}),
                            so the game can load it with a plain <script> tag.
 * game/map/countries.json  code -> name, kind (un, observer, partial or
-                           territory), sub-region, continent and a point
+                           territory), its UN sub-region ("sub"), every region
+                           and continent it has land in, its neighbours, and a point
                            inside the country's largest piece (lat/lon). The
                            server uses it to score guesses (see
                            kolibri-games/docs/PHOTO_PACKS.md), and the pack tool
@@ -24,6 +25,13 @@ import json
 import math
 import os
 import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+from beacon_pack import geo, regions as R  # noqa: E402  (the continents and the special cases)
+
+#: Countries within this distance across water count as neighbours (on the map,
+#: whose simplified coasts put Florida 153 km from Cuba).
+NEIGHBOUR_KM = 160.0
 
 #: world.js is this line followed by the map's JSON and ";" (beacon_pack/geo.py reads it back).
 MAP_PREFIX = "/* Made by tools/import_singe_map.py from SINGE's world map. Don't edit by hand. */\nwindow.BEACON_MAP = "
@@ -73,8 +81,10 @@ def convert(src):
         for field in ("s", "mk", "sz", "small", "ins", "decor", "twin", "iso2"):
             if field in r:
                 out[field] = r[field]
+        if key in R.EXCLUDED:
+            out["off"] = 1  # a disputed area left out of the game: drawn, but can't be picked
         regions.append(out)
-        if key and r.get("kind") != "part" and key not in countries:
+        if key and key not in R.EXCLUDED and r.get("kind") != "part" and key not in countries:
             mk = r.get("mk")
             if mk is None:  # a territory made only of separate parts (Saint Helena...): use its largest part
                 parts = [p for p in m["regions"] if p.get("part_of") == r["name"] and p.get("mk")]
@@ -84,13 +94,29 @@ def convert(src):
             lat, lon = to_lat_lon(mk[0], mk[1], m["projection"])
             countries[key] = {"name": r["name"], "kind": r.get("kind"), "sub": r.get("sub"), "cont": r.get("cont"),
                               "iso2": r.get("iso2"), "lat": lat, "lon": lon}
+    # Every region and continent a country has land in (its parts count: Hawaii
+    # puts the United States in Polynesia), and Asian Russia and Papua.
+    for r in regions:
+        if r["key"] in countries and r.get("sub"):
+            countries[r["key"]].setdefault("regions", set()).add(r["sub"])
+    countries["RUS"]["regions"].add(R.NORTHERN_ASIA)
+    countries["IDN"]["regions"].add("Melanesia")
+    for c in countries.values():
+        c["regions"] = sorted(c.get("regions", ()))
+        c["continents"] = sorted({R.continent_of(s) for s in c["regions"]} - {None})
+    world_shapes = {"projection": m["projection"], "regions": regions}
+    neighbours = geo.find_neighbours(geo.outline_points(world_shapes, skip=R.EXCLUDED), NEIGHBOUR_KM)
+    for key, c in countries.items():
+        c["neighbours"] = [n for n in neighbours.get(key, []) if n in countries]
+
     world = {
         "source": "SINGE world map (tools/import_singe_map.py), from Natural Earth 10m Admin 0 - Countries (public domain).",
         "projection": m["projection"], "size": m["size"], "strip": m["strip"], "strip_y": m.get("strip_y"),
         "insets": m["insets"],
         "lakes": m.get("lakes", []), "regions": regions,
         # The country names and points the game needs (the same as countries.json).
-        "countries": {k: {"name": c["name"], "kind": c["kind"], "sub": c["sub"], "lat": c["lat"], "lon": c["lon"]}
+        "countries": {k: {"name": c["name"], "kind": c["kind"], "sub": c["sub"], "lat": c["lat"], "lon": c["lon"],
+                          "continents": c["continents"]}
                       for k, c in sorted(countries.items())},
     }
     return world, countries
@@ -106,7 +132,8 @@ def main(argv):
         json.dump(world, f, ensure_ascii=False, separators=(",", ":"))
         f.write(";\n")
     with open(os.path.join(OUT, "countries.json"), "w", encoding="utf-8") as f:
-        json.dump(dict(sorted(countries.items())), f, ensure_ascii=False, indent=0)
+        f.write("{\n" + ",\n".join("%s: %s" % (json.dumps(k), json.dumps(v, ensure_ascii=False))
+                                    for k, v in sorted(countries.items())) + "\n}\n")
     print("%d regions, %d countries -> %s" % (len(world["regions"]), len(countries), os.path.abspath(OUT)))
 
 
