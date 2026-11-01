@@ -1,0 +1,160 @@
+/* BeaconHunt. Night-sky colours with a warm beacon light; the photo gets most of the screen. */
+:root {
+  --bg: #0e1726;
+  --panel: #16233a;
+  --line: #2a3b58;
+  --text: #eef2f8;
+  --muted: #a3b0c5;
+  --beacon: #f5a524;
+  --beacon-dark: #c77d07;
+  --right: #22c55e;
+  --wrong: #ef4444;
+  --sea: #1b3150;
+  --land: #e7e1cf;
+  --land-faded: #6f7a8c;
+  --border: #4b5568;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+[hidden] { display: none !important; }
+h1 { font-size: 2.2rem; margin: 0.2em 0; letter-spacing: -0.01em; }
+h1 b, .brand b { color: var(--beacon); }
+button {
+  font: inherit;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 0.5em 1em;
+  cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--beacon); }
+button:focus-visible, canvas:focus-visible, .flat:focus-visible { outline: 3px solid var(--beacon); outline-offset: 2px; }
+button:disabled { opacity: 0.5; cursor: default; }
+button.go { background: var(--beacon); border-color: var(--beacon); color: #1b1300; font-weight: 700; }
+button.go:hover:not(:disabled) { background: #ffb940; }
+
+/* ------------------------------------------------------------ intro and results */
+.screen { max-width: 46rem; margin: 0 auto; padding: 2rem 1rem 3rem; }
+.intro { text-align: center; }
+.intro .logo { width: 96px; height: 96px; }
+.lead { font-size: 1.15rem; color: var(--text); }
+.rules { text-align: left; color: var(--muted); max-width: 34rem; margin: 1.2rem auto; padding-left: 1.2rem; }
+.rules li { margin: 0.35em 0; }
+.note { color: var(--muted); }
+.warn { color: #ffb4a8; }
+.small { color: var(--muted); font-size: 0.85rem; margin-top: 2rem; }
+.intro .go { font-size: 1.2rem; padding: 0.6em 2.4em; margin-top: 0.5rem; }
+.actions { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 1.5rem; }
+.table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+.table caption { text-align: left; font-weight: 700; padding-bottom: 0.4rem; }
+.table th, .table td { padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--line); text-align: left; }
+.table th { color: var(--muted); font-weight: 600; font-size: 0.9rem; }
+.table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.table tr.right td:nth-child(3) { color: var(--right); }
+.table tr.me td { background: rgba(245, 165, 36, 0.15); }
+
+/* ------------------------------------------------------------ playing */
+.hud {
+  height: 44px;
+  display: flex; align-items: center; gap: 1.2rem;
+  padding: 0 0.8rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.hud .brand { font-weight: 700; margin-right: auto; }
+.hud .points { color: var(--beacon); font-weight: 700; font-variant-numeric: tabular-nums; }
+.play {
+  height: calc(100% - 44px);
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: 1px;
+  background: var(--line);
+}
+body.big-map .play { grid-template-columns: 2fr 3fr; }
+@media (orientation: portrait), (max-width: 700px) {
+  .play { grid-template-columns: 1fr; grid-template-rows: 55% 45%; }
+  body.big-map .play { grid-template-columns: 1fr; grid-template-rows: 35% 65%; }
+}
+.photo-pane, .map-pane { position: relative; overflow: hidden; background: var(--bg); min-height: 0; }
+
+/* the photo */
+.viewer canvas.pano { width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+.viewer.dragging canvas.pano { cursor: grabbing; }
+.viewer .flat { width: 100%; height: 100%; overflow: hidden; cursor: zoom-in; touch-action: none; }
+.viewer .flat img { width: 100%; height: 100%; object-fit: contain; display: block; user-select: none; -webkit-user-drag: none; }
+.viewer .flat.zoomed { overflow: auto; cursor: grab; }
+.viewer .flat.zoomed img { width: 250%; height: 250%; }
+.viewer .flat.wide { overflow-x: auto; cursor: ew-resize; }
+.viewer .flat.wide img { width: auto; height: 100%; max-width: none; }
+.viewer-hint {
+  position: absolute; left: 0.6rem; bottom: 0.4rem; margin: 0;
+  font-size: 0.85rem; color: #fff; text-shadow: 0 1px 3px #000; pointer-events: none;
+}
+.viewer-loading {
+  position: absolute; inset: 0; margin: 0; display: grid; place-items: center;
+  color: var(--muted); background: rgba(14, 23, 38, 0.7); pointer-events: none;
+}
+
+/* the map */
+.map { position: absolute; inset: 0 0 56px 0; display: flex; flex-direction: column; }
+.bmap svg.world { flex: 1; width: 100%; min-height: 0; touch-action: none; cursor: pointer; display: block; }
+.bmap svg.strip { width: 100%; height: auto; max-height: 22%; flex: none; background: var(--sea); }
+.bmap .sea { fill: var(--sea); }
+.bmap .country { fill: var(--land); stroke: var(--border); stroke-width: 0.8; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.bmap .country.nostroke { stroke: none; }
+.bmap .outline { fill: none; stroke: var(--border); stroke-width: 0.8; vector-effect: non-scaling-stroke; pointer-events: none; }
+.bmap .lake { fill: var(--sea); pointer-events: none; }
+.bmap .decor { pointer-events: none; }
+.bmap .faded { fill: var(--land-faded); }
+.bmap .country:hover { fill: #fff3d6; }
+.bmap .faded:hover { fill: #8d97a8; }
+.bmap .tiny { fill: var(--land); fill-opacity: 0.85; stroke: var(--bg); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.bmap .tiny.faded { fill: var(--land-faded); }
+.bmap .picked, .bmap .picked:hover { fill: var(--beacon); }
+.bmap .answer, .bmap .answer:hover { fill: var(--right); }
+.bmap .wrong, .bmap .wrong:hover { fill: var(--wrong); }
+.bmap.revealed svg { cursor: grab; }
+.bmap.revealed .country:not(.answer):not(.wrong):hover { fill: var(--land); }
+.bmap .inbox { fill: none; stroke: var(--line); stroke-width: 3; }
+.bmap .chain { fill: none; stroke: var(--line); stroke-width: 2; stroke-dasharray: 6 6; pointer-events: none; }
+.bmap .intitle { fill: var(--muted); font-size: 44px; pointer-events: none; }
+.bmap .beacon { fill: var(--beacon); stroke: #1b1300; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.bmap .beacon-ring { fill: none; stroke: var(--beacon); stroke-width: 2; vector-effect: non-scaling-stroke; animation: pulse 1.6s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+.bmap .guessline { stroke: #fff; stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; stroke-width: 2; }
+@keyframes pulse { from { opacity: 1; transform: scale(0.6); } to { opacity: 0; transform: scale(1.6); } }
+@media (prefers-reduced-motion: reduce) { .bmap .beacon-ring { animation: none; } }
+.maptip {
+  position: absolute; z-index: 3; pointer-events: none;
+  background: #000c; color: #fff; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.85rem; white-space: nowrap;
+}
+
+.zoom { position: absolute; top: 0.5rem; right: 0.5rem; display: flex; flex-direction: column; gap: 4px; z-index: 2; }
+.zoom button { width: 36px; height: 36px; padding: 0; font-size: 1.2rem; line-height: 1; }
+.swap { position: absolute; top: 0.5rem; left: 0.5rem; z-index: 2; font-size: 0.85rem; padding: 0.3em 0.7em; }
+
+.guessbar, .result {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 2;
+  display: flex; align-items: center; gap: 0.8rem;
+  padding: 0.5rem 0.8rem;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+}
+.guessbar { height: 56px; }
+.guessbar .pick { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.guessbar .go { padding: 0.5em 1.8em; }
+.result { flex-wrap: wrap; min-height: 56px; border-top: 3px solid var(--right); }
+.result.wrong { border-top-color: var(--wrong); }
+.result p { margin: 0; }
+.result-text { flex: 1 1 14rem; min-width: 0; }
+.result-title { font-weight: 700; font-size: 1.1rem; }
+.result.right .result-title { color: var(--right); }
+.result-points { font-weight: 700; color: var(--beacon); font-size: 1.2rem; font-variant-numeric: tabular-nums; }
+.credit { font-size: 0.78rem; color: var(--muted); margin-top: 0.2rem !important; }
+.credit-url { white-space: nowrap; }
+.floating { position: absolute; left: 1rem; top: 3.2rem; z-index: 5; background: var(--panel); padding: 0.5rem 0.8rem; border-radius: 6px; }

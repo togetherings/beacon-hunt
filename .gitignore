@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+# Photo packs you make (big, and the photos are CC BY-SA, not MIT)
+packs/
+.build/
+.pytest_cache/

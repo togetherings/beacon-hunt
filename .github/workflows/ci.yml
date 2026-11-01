@@ -1,0 +1,50 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # The Kolibri Games version the game is tested with (needs the photo-guess service, 0.2.0+).
+  KOLIBRI_GAMES: "kolibri-games @ git+https://github.com/togetherings/kolibri-games@main"
+
+jobs:
+  unit:
+    name: Unit tests (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install pytest pillow -e . "$KOLIBRI_GAMES"
+      - run: tools/ci_run.sh "Unit tests" python -m pytest -q
+      - name: Package the game
+        run: tools/ci_run.sh "Package" kolibri-games-pack game -o dist/beacon-hunt.zip
+
+  browser:
+    name: Browser test (preview server)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pillow playwright -e . "$KOLIBRI_GAMES"
+      - run: python -m playwright install --with-deps chromium
+      - run: tools/ci_run.sh "Browser test" python -m tests.e2e_browser --screenshots screenshots
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: screenshots
+          if-no-files-found: ignore
