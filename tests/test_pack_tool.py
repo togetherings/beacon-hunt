@@ -169,3 +169,38 @@ def test_a_refused_license_download_isnt_blamed_on_the_token(tmp_path):
     text = " ".join(messages)
     assert "creativecommons.org refused the download" in text and "token" not in text
     assert build.LEGALCODE_URL in (tmp_path / "west-africa" / "LICENSE.txt").read_text()
+
+
+def test_broken_tiles_are_fetched_again_or_skipped(tmp_path):
+    fake = FakeMapillary(photos())
+    calls = {"n": 0}
+
+    def flaky(url, headers):
+        # The first answer for every tile is an error page; the second is the real tile.
+        if "tiles.mapillary.com" in url:
+            calls["n"] += 1
+            if calls["n"] % 2 == 1:
+                return b"<html><body>Service unavailable</body></html>"
+        return fake(url, headers)
+
+    messages = []
+    client = Client("MLY|test", pause=0, fetch=flaky, log=messages.append)
+    _info, chosen = build.build("west-africa", str(tmp_path), client,
+                                build.Options(places=4, countries=["SLE"]), log=messages.append)
+    assert len(chosen) == 4 and any("trying again" in m for m in messages)
+    # A broken tile saved by an older version is fetched again.
+    tiles = [os.path.join(r, n) for r, _d, files in os.walk(str(tmp_path)) for n in files if n.endswith(".mvt")]
+    with open(tiles[0], "wb") as f:
+        f.write(b"<html>oops</html>")
+    client = Client("MLY|test", pause=0, fetch=fake, log=messages.append)
+    build.build("west-africa", str(tmp_path), client, build.Options(places=4, countries=["SLE"]), log=messages.append)
+    assert any("saved earlier was broken" in m for m in messages)
+    assert mvt.looks_valid(open(tiles[0], "rb").read())
+    assert not mvt.looks_valid(b"<html>") and mvt.looks_valid(b"")
+
+
+def test_a_rebuild_keeps_the_photos_it_already_has(tmp_path):
+    _fake, _info, first = make(tmp_path, places=5)
+    # A different seed would normally pick other places; the downloaded ones are kept.
+    _fake, _info, again = make(tmp_path, places=5, seed="other")
+    assert {p["id"] for p in again} == {p["id"] for p in first}

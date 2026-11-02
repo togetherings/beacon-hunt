@@ -71,8 +71,12 @@ def _value(buf):
     return None
 
 
-def _geometry(cmds):
+def _geometry(cmds, first_only=False):
     """The points of a feature's geometry, in tile units (every vertex of lines and polygons)."""
+    if first_only:  # just the first point: much faster for long lines
+        if len(cmds) >= 3 and cmds[0] & 7 == 1:
+            return [(_zigzag(cmds[1]), _zigzag(cmds[2]))]
+        return []
     points, x, y, i = [], 0, 0, 0
     while i < len(cmds):
         cmd, count = cmds[i] & 7, cmds[i] >> 3
@@ -87,8 +91,26 @@ def _geometry(cmds):
     return points
 
 
-def decode(data, z, tx, ty, layers=None):
-    """{layer name: [(properties, [(lon, lat), ...]), ...]} for one tile."""
+def looks_valid(data):
+    """Is this a vector tile? (An empty tile is fine.) Catches error pages saved by mistake."""
+    try:
+        data = bytes(data)
+        if data[:2] == b"\x1f\x8b":
+            data = gzip.decompress(data)
+        for field, wire, _value in _fields(memoryview(data)):
+            if field != 3 or wire != 2:  # a tile holds only layers (field 3)
+                return False
+        return True
+    except (ValueError, IndexError, OSError, EOFError):
+        return False
+
+
+def decode(data, z, tx, ty, layers=None, first_point=False):
+    """{layer name: [(properties, [(lon, lat), ...]), ...]} for one tile.
+
+    first_point=True gives only each feature's first point (the pack tool only
+    needs where a sequence starts), which is much faster.
+    """
     data = bytes(data)
     if data[:2] == b"\x1f\x8b":
         data = gzip.decompress(data)
@@ -120,7 +142,8 @@ def decode(data, z, tx, ty, layers=None):
                 elif f == 4:
                     geom = _packed(v)
             props = {keys[tags[j]]: values[tags[j + 1]] for j in range(0, len(tags) - 1, 2)}
-            found.append((props, [tile_to_lon_lat(z, tx, ty, px / extent, py / extent) for px, py in _geometry(geom)]))
+            found.append((props, [tile_to_lon_lat(z, tx, ty, px / extent, py / extent)
+                                  for px, py in _geometry(geom, first_point)]))
         out.setdefault(name, []).extend(found)
     return out
 

@@ -26,6 +26,8 @@ KM_PER_DEGREE = 111.32
 #: degrees, so photos there are found, and photos in the country around them are kept
 #: away from them. (The map's marker points are rounded to about 5 km: too rough here.)
 TINY_MARGIN_KM = 0.3
+#: The grid squares used to answer locate() quickly, in degrees (about 5 km).
+CELL_DEGREES = 0.05
 TINY_PLACES = {
     "GIB": (36.108, -5.366, 36.150, -5.338),   # Gibraltar, up to the border with La Línea
     "VAT": (41.900, 12.446, 41.9075, 12.458),  # Vatican City
@@ -195,6 +197,7 @@ class WorldMap(object):
     """The countries of the game's map, for finding where a point is."""
 
     def __init__(self, data=None, keys=None):
+        self._cells = {}  # grid squares already known to be in one country (see locate)
         data = data or load_map()
         p = data["projection"]
         self.k = float(p["k"])
@@ -248,6 +251,40 @@ class WorldMap(object):
         coastline is simplified) count for the nearest country if it's within
         coast_km and nothing else is near.
         """
+        # Most places are well inside a country: answer them from a grid of small
+        # squares (CELL_DEGREES across) that are known to lie in one country, far
+        # from any other. Places near borders and coasts are worked out one by one.
+        key = (int(math.floor(lat / CELL_DEGREES)), int(math.floor(lon / CELL_DEGREES)), margin_km, coast_km)
+        cell = self._cells.get(key)
+        if cell is None:
+            cell = self._cells[key] = self._whole_cell(key, margin_km, coast_km)
+        if cell is not False:
+            return cell
+        return self._locate(lat, lon, margin_km, coast_km)
+
+    def _whole_cell(self, key, margin_km, coast_km):
+        """The answer for every point in a grid square, or False if they may differ."""
+        lat = (key[0] + 0.5) * CELL_DEGREES
+        lon = (key[1] + 0.5) * CELL_DEGREES
+        half_diagonal = KM_PER_DEGREE * CELL_DEGREES * 0.75  # a bit more than half the diagonal
+        x, y = self.xy(lat, lon)
+        sx, sy = self.scale(lat)
+        inside = [c for c in self.countries.values() if c.contains(x, y)]
+        if not inside:
+            # Open sea, if no land is within reach of any point in the square.
+            if all(c.distance_km(x, y, sx, sy, coast_km + half_diagonal) is None for c in self.countries.values()):
+                return None, "not on land on the map"
+            return False
+        home = min(inside, key=lambda c: c.area)
+        if home.off or home.tiny:
+            return False
+        reach = max(margin_km, TINY_MARGIN_KM) + half_diagonal
+        for c in self.countries.values():
+            if c is not home and c.distance_km(x, y, sx, sy, reach) is not None:
+                return False
+        return home.key, "ok"
+
+    def _locate(self, lat, lon, margin_km, coast_km):
         x, y = self.xy(lat, lon)
         sx, sy = self.scale(lat)
         inside = [c for c in self.countries.values() if c.contains(x, y)]

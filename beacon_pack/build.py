@@ -99,37 +99,94 @@ def fetch_coverage(client, world, countries, zoom, log):
 # ---------------------------------------------------------------- 2. places
 
 
-def find_candidates(client, world, countries, tiles, opts, log):
-    """{country: [candidate]} where a candidate is a sequence's first photo."""
+#: Possible places closer together than this (in degrees, about 2 km) are thinned
+#: to a few, before the slow step of checking which country each is in.
+THIN_DEGREES = 0.02
+THIN_KEEP = 3
+CANDIDATES_VERSION = 2
+
+
+def _candidates_key(countries, opts):
+    """What the saved list of possible places depends on: if any of it changes, it's made again."""
+    with open(geo.COUNTRIES_FILE, "rb") as f:
+        map_hash = hashlib.sha256(f.read()).hexdigest()[:16]
+    return {"version": CANDIDATES_VERSION, "zoom": opts.zoom, "countries": sorted(countries),
+            "margin_km": opts.margin_km, "since": opts.since, "pano_only": bool(opts.pano_only), "map": map_hash}
+
+
+def find_candidates(client, world, countries, tiles, opts, log, build_dir=None):
+    """{country: [candidate]} where a candidate is a sequence's first photo.
+
+    Busy areas have many sequences close together, so they're thinned first
+    (at most THIN_KEEP every 2 km or so, 360° ones first): far fewer to check,
+    and plenty left to spread the places out. The result is saved in the
+    build folder, so running the build again skips this step.
+    """
+    key = _candidates_key(countries, opts)
+    path = os.path.join(build_dir, "candidates.json") if build_dir else None
+    saved = _load_json(path, None) if path else None
+    if saved and saved.get("key") == key:
+        found = saved["found"]
+        log("Places: %d possible places in %d countries (saved earlier)"
+            % (sum(len(v) for v in found.values()), len(found)))
+        return found
+
     wanted = set(countries)
     since_ms = None
     if opts.since:
         since_ms = int(datetime.datetime(int(opts.since), 1, 1, tzinfo=datetime.timezone.utc).timestamp() * 1000)
-    seen, found, skipped = set(), {}, 0
-    for x, y in tiles:
+    seen, cells, routes = set(), {}, 0
+    log("Reading the coverage tiles")
+    for n, (x, y) in enumerate(tiles):
+        if n and n % 25 == 0:
+            log("  %d of %d tiles read, %d routes so far" % (n, len(tiles), routes))
         data = client.tile(opts.zoom, x, y)
         if not data:
             continue
-        for props, points in mvt.decode(data, opts.zoom, x, y, layers={"sequence"}).get("sequence", []):
+        try:
+            features = mvt.decode(data, opts.zoom, x, y, layers={"sequence"}, first_point=True).get("sequence", [])
+        except (ValueError, IndexError, OSError, EOFError) as e:
+            log("  skipping tile %d/%d/%d: it can't be read (%s)" % (opts.zoom, x, y, e))
+            continue
+        for props, points in features:
             seq, image_id = props.get("id"), props.get("image_id")
             if not points or image_id is None or seq in seen:
                 continue
             seen.add(seq)
+            routes += 1
             pano = bool(props.get("is_pano"))
             if opts.pano_only and not pano:
                 continue
             if since_ms and (props.get("captured_at") or 0) < since_ms:
                 continue
             lon, lat = points[0]
-            code, _why = world.locate(lat, lon, opts.margin_km)
-            if code not in wanted:
-                skipped += 1
-                continue
-            found.setdefault(code, []).append({"image": str(image_id), "sequence": str(seq), "lat": lat,
-                                               "lon": lon, "pano": pano})
+            cand = {"image": str(image_id), "sequence": str(seq), "lat": lat, "lon": lon, "pano": pano}
+            cell = cells.setdefault((int(lat // THIN_DEGREES), int(lon // THIN_DEGREES)), [])
+            if len(cell) < THIN_KEEP:
+                cell.append(cand)
+            elif pano:  # a 360° one replaces an ordinary one
+                for i, c in enumerate(cell):
+                    if not c["pano"]:
+                        cell[i] = cand
+                        break
+    kept = [c for cell in cells.values() for c in cell]
+    log("Checking which country %d possible places are in (from %d routes)" % (len(kept), routes))
+    found, skipped = {}, 0
+    for n, cand in enumerate(kept):
+        if n and n % 20000 == 0:
+            log("  %d of %d checked" % (n, len(kept)))
+        code, _why = world.locate(cand["lat"], cand["lon"], opts.margin_km)
+        if code not in wanted:
+            skipped += 1
+            continue
+        found.setdefault(code, []).append(cand)
+    for code in found:  # the same order every run, so the same seed picks the same places
+        found[code].sort(key=lambda c: c["sequence"])
     total = sum(len(v) for v in found.values())
-    log("Places: %d possible places (sequences) in %d countries; %d elsewhere or near a border"
+    log("Places: %d possible places in %d countries; %d elsewhere or near a border"
         % (total, len(found), skipped))
+    if path:
+        _save_json(path, {"key": key, "found": found})
     return found
 
 
@@ -419,7 +476,7 @@ def build(region_id, out_dir, client, opts=None, log=print, today=None):
     log("%s: %d countries (%s), %d places" % (title, len(countries), " ".join(countries), opts.places))
 
     tiles = fetch_coverage(client, world, countries, opts.zoom, log)
-    found = find_candidates(client, world, countries, tiles, opts, log)
+    found = find_candidates(client, world, countries, tiles, opts, log, build_dir)
     if not found:
         raise BuildError("Mapillary has no photos in these countries (or none away from borders).")
     quota = share_out(world, found, opts.places, opts.min_per_country)
@@ -429,6 +486,14 @@ def build(region_id, out_dir, client, opts=None, log=print, today=None):
 
     checked_path = os.path.join(build_dir, "checked.json")
     checked = _load_json(checked_path, {})
+    # Photos already downloaded by an earlier run go first, so rebuilding a pack
+    # (for example after the tool changes) reuses them instead of downloading others.
+    photo_dir = os.path.join(pack_dir, "photos")
+    have = {n[:-4] for n in os.listdir(photo_dir) if n.endswith(".jpg")} if os.path.isdir(photo_dir) else set()
+    if have:
+        for code in ordered:
+            ordered[code] = ([c for c in ordered[code] if c["image"] in have] +
+                             [c for c in ordered[code] if c["image"] not in have])
     log("Check: asking Mapillary about the picked photos")
     chosen = choose(client, world, ordered, quota, opts, checked, lambda: _save_json(checked_path, checked), log,
                     Scoring(world))
