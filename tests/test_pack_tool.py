@@ -197,3 +197,10 @@ def test_broken_tiles_are_fetched_again_or_skipped(tmp_path):
     assert any("saved earlier was broken" in m for m in messages)
     assert mvt.looks_valid(open(tiles[0], "rb").read())
     assert not mvt.looks_valid(b"<html>") and mvt.looks_valid(b"")
+
+
+def test_a_rebuild_keeps_the_photos_it_already_has(tmp_path):
+    _fake, _info, first = make(tmp_path, places=5)
+    # A different seed would normally pick other places; the downloaded ones are kept.
+    _fake, _info, again = make(tmp_path, places=5, seed="other")
+    assert {p["id"] for p in again} == {p["id"] for p in first}

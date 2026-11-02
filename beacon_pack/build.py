@@ -486,6 +486,14 @@ def build(region_id, out_dir, client, opts=None, log=print, today=None):
 
     checked_path = os.path.join(build_dir, "checked.json")
     checked = _load_json(checked_path, {})
+    # Photos already downloaded by an earlier run go first, so rebuilding a pack
+    # (for example after the tool changes) reuses them instead of downloading others.
+    photo_dir = os.path.join(pack_dir, "photos")
+    have = {n[:-4] for n in os.listdir(photo_dir) if n.endswith(".jpg")} if os.path.isdir(photo_dir) else set()
+    if have:
+        for code in ordered:
+            ordered[code] = ([c for c in ordered[code] if c["image"] in have] +
+                             [c for c in ordered[code] if c["image"] not in have])
     log("Check: asking Mapillary about the picked photos")
     chosen = choose(client, world, ordered, quota, opts, checked, lambda: _save_json(checked_path, checked), log,
                     Scoring(world))
