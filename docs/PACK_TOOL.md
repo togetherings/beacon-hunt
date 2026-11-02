@@ -73,6 +73,10 @@ Faroe Islands, the Falkland Islands, Bermuda and Gibraltar.
 6. **Writes** `pack.json`, `places.json`, `LICENSE.txt` (with the full CC BY-SA 4.0 text) and
    `CREDITS.txt`, and with `--zip`, `packs/west-africa.zip`.
 
+Reading the coverage tiles and checking which country each possible place is in can take
+several minutes for big, well-photographed regions (North and South America, Europe). The tool
+prints its progress, and saves the result, so running it again skips this step.
+
 You can stop it (Ctrl+C) at any time. Run the same command again and it carries on: coverage
 tiles, photo details and downloaded photos are kept (in `packs/.build/`, which Kolibri Games
 ignores). Running it again later with the same options gives the same places, plus any changes on
