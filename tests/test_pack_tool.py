@@ -199,6 +199,29 @@ def test_broken_tiles_are_fetched_again_or_skipped(tmp_path):
     assert not mvt.looks_valid(b"<html>") and mvt.looks_valid(b"")
 
 
+def test_the_build_stops_when_mapillary_keeps_sending_error_pages(tmp_path):
+    fake = FakeMapillary(photos())
+
+    def refusing(url, headers):
+        if "tiles.mapillary.com" in url:
+            return b"<h1>Not Logged In</h1>"
+        return fake(url, headers)
+
+    client = Client("MLY|test", pause=0, fetch=refusing, log=quiet)
+    with pytest.raises(MapillaryError) as e:
+        build.build("west-africa", str(tmp_path), client, build.Options(places=4, countries=["SLE"]), log=quiet)
+    assert "Not Logged In" in str(e.value) and "50,000" in str(e.value) and "MLY" not in str(e.value)
+    # Nothing broken was saved.
+    assert not [n for _r, _d, files in os.walk(str(tmp_path)) for n in files if n.endswith(".mvt")]
+
+
+def test_only_tiles_touching_land_are_fetched():
+    world = geo.WorldMap()
+    usa = world.tiles("USA", 8)  # its box runs from the Aleutians to Maine: mostly sea and Canada
+    assert len(usa) < len(list(mvt.tiles_for_bbox(8, *world.country_bbox("USA")))) / 2
+    assert world.tiles("SLE", 8) <= set(mvt.tiles_for_bbox(8, *world.country_bbox("SLE")))
+
+
 def test_a_rebuild_keeps_the_photos_it_already_has(tmp_path):
     _fake, _info, first = make(tmp_path, places=5)
     # A different seed would normally pick other places; the downloaded ones are kept.

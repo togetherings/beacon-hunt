@@ -235,6 +235,33 @@ class WorldMap(object):
         m = self.top - y / self.k
         return math.degrees((math.atan(math.exp(0.8 * math.radians(m))) - math.pi / 4) / 0.4)
 
+    def tiles(self, key, z):
+        """The (x, y) of the Web Mercator tiles at zoom z that touch a country's land.
+
+        A tile touches it if a corner of the country's outline is in the tile,
+        or the tile's middle is inside the country. Far fewer than the tiles of
+        the country's whole box (Canada's box is mostly sea and ice).
+        """
+        from . import mvt  # (mvt has no imports of ours)
+        n = 2 ** z
+        found = set()
+        country = self.countries[key]
+        for _bbox, ring in country.rings:
+            for x, y in ring:
+                lat, lon = self.lat_of(y), x / self.k - 180.0
+                tx = int((lon + 180.0) / 360.0 * n) % n
+                r = math.radians(max(-85.0511, min(85.0511, lat)))
+                ty = int((1 - math.log(math.tan(r) + 1 / math.cos(r)) / math.pi) / 2 * n)
+                found.add((tx, min(n - 1, max(0, ty))))
+        south, west, north, east = self.country_bbox(key)
+        for tx, ty in mvt.tiles_for_bbox(z, south, west, north, east):
+            if (tx, ty) in found:
+                continue
+            lon, lat = mvt.tile_to_lon_lat(z, tx, ty, 0.5, 0.5)
+            if country.contains(*self.xy(lat, lon)):
+                found.add((tx, ty))
+        return found
+
     def area_km2(self, key):
         """Rough land area (good enough for sharing photos out between countries)."""
         c = self.countries[key]

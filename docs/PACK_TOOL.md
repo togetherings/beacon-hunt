@@ -77,6 +77,13 @@ Reading the coverage tiles and checking which country each possible place is in 
 several minutes for big, well-photographed regions (North and South America, Europe). The tool
 prints its progress, and saves the result, so running it again skips this step.
 
+**Mapillary's daily limit.** Mapillary allows an app 50,000 coverage-tile requests a day. The
+tool only fetches tiles that touch a region's land: a few hundred for most regions, about 1,000
+for South America and East Asia, and about 4,000 to 5,500 for Northern America and Eastern Europe
+(Canada, Greenland and Russia are huge). If Mapillary starts sending error pages instead of tiles
+(for example "Not Logged In"), the tool stops and says so; run the same command again later, and
+it carries on from where it stopped.
+
 You can stop it (Ctrl+C) at any time. Run the same command again and it carries on: coverage
 tiles, photo details and downloaded photos are kept (in `packs/.build/`, which Kolibri Games
 ignores). Running it again later with the same options gives the same places, plus any changes on
