@@ -87,6 +87,20 @@ def _geometry(cmds):
     return points
 
 
+def looks_valid(data):
+    """Is this a vector tile? (An empty tile is fine.) Catches error pages saved by mistake."""
+    try:
+        data = bytes(data)
+        if data[:2] == b"\x1f\x8b":
+            data = gzip.decompress(data)
+        for field, wire, _value in _fields(memoryview(data)):
+            if field != 3 or wire != 2:  # a tile holds only layers (field 3)
+                return False
+        return True
+    except (ValueError, IndexError, OSError, EOFError):
+        return False
+
+
 def decode(data, z, tx, ty, layers=None):
     """{layer name: [(properties, [(lon, lat), ...]), ...]} for one tile."""
     data = bytes(data)

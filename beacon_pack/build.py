@@ -110,7 +110,12 @@ def find_candidates(client, world, countries, tiles, opts, log):
         data = client.tile(opts.zoom, x, y)
         if not data:
             continue
-        for props, points in mvt.decode(data, opts.zoom, x, y, layers={"sequence"}).get("sequence", []):
+        try:
+            features = mvt.decode(data, opts.zoom, x, y, layers={"sequence"}).get("sequence", [])
+        except (ValueError, IndexError, OSError, EOFError) as e:
+            log("  skipping tile %d/%d/%d: it can't be read (%s)" % (opts.zoom, x, y, e))
+            continue
+        for props, points in features:
             seq, image_id = props.get("id"), props.get("image_id")
             if not points or image_id is None or seq in seen:
                 continue

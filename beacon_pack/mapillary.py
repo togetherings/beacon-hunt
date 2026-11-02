@@ -23,6 +23,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from . import mvt
+
 TILE_URL = "https://tiles.mapillary.com/maps/vtp/mly1_public/2/{z}/{x}/{y}"
 GRAPH_URL = "https://graph.mapillary.com/"
 IMAGE_FIELDS = ("id,geometry,computed_geometry,is_pano,camera_type,captured_at,creator,"
@@ -111,15 +113,27 @@ class Client(object):
         path = os.path.join(self.cache_dir, "tiles", str(z), str(x), "%d.mvt" % y) if self.cache_dir else None
         if path and os.path.exists(path):
             with open(path, "rb") as f:
-                return f.read()
+                data = f.read()
+            if mvt.looks_valid(data):
+                return data
+            self.log("  tile %d/%d/%d saved earlier was broken; fetching it again" % (z, x, y))
         url = TILE_URL.format(z=z, x=x, y=y) + "?" + urllib.parse.urlencode({"access_token": self.token})
-        try:
-            data = self._get(url, {}, "tile %d/%d/%d" % (z, x, y))
-        except MapillaryError as e:
-            if e.status == 404:  # no photos in this square
-                data = b""
-            else:
-                raise
+        data = b""
+        for attempt in range(2):
+            try:
+                data = self._get(url, {}, "tile %d/%d/%d" % (z, x, y))
+            except MapillaryError as e:
+                if e.status == 404:  # no photos in this square
+                    data = b""
+                else:
+                    raise
+            if mvt.looks_valid(data):
+                break
+            # Mapillary sometimes answers with an error page instead of a tile.
+            self.log("  tile %d/%d/%d isn't a tile (%r...)%s" % (
+                z, x, y, bytes(data[:20]), "; trying again" if attempt == 0 else "; skipping it"))
+            time.sleep(max(self.pause, 1.0))
+            data = b""
         if path:
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path + ".part", "wb") as f:
