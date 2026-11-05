@@ -1,6 +1,6 @@
 {
   "format": 1,
-  "type": "free-play",
+  "type": "server",
   "id": "org.togetherings.beacon-hunt",
   "version": "0.1.0",
   "title": "BeaconHunt",

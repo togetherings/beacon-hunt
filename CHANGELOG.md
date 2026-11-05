@@ -2,7 +2,8 @@
 
 ## 0.1.0
 
-First version. Needs Kolibri Games 0.2.0 or later.
+First version. Needs Kolibri Games 0.2.0 or later. It's a Server Game (`"type": "server"`): the
+plugin's server keeps the answers, so it's installed on the games page, not put in a channel.
 
 - The game: a street photo (360° photos can be looked around) and a world map. Two modes: find
   the country (1,000 points, or 500 for a country next door, 300 for the same region, 100 for the

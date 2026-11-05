@@ -19,6 +19,7 @@ def test_the_manifest_matches_the_photo_guess_service():
     assert m["version"] == __version__, "the game and the pack tool share a version"
     assert m["service"] == "photo-guess" and m["data"] == [{"name": "photo-packs"}]
     assert os.path.exists(os.path.join(GAME, m["photos"]["countries"]))
+    assert m["type"] == "server" and m["service"] == "photo-guess"
     assert {s["key"]: s["type"] for s in m["settings"]} == {"mode": "choice", "map": "photo_map", "rounds": "integer"}
     for name in (m["entry"], m["icon"]):
         assert os.path.exists(os.path.join(GAME, name))
