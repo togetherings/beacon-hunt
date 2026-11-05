@@ -85,8 +85,7 @@ def fetch_coverage(client, world, countries, zoom, log):
     """{(x, y)} tiles over the countries, fetched (or read from the cache)."""
     tiles = set()
     for code in countries:
-        south, west, north, east = world.country_bbox(code)
-        tiles.update(mvt.tiles_for_bbox(zoom, south, west, north, east))
+        tiles.update(world.tiles(code, zoom))  # only the tiles that touch the country's land
     tiles = sorted(tiles)
     log("Coverage: %d tiles at zoom %d" % (len(tiles), zoom))
     for i, (x, y) in enumerate(tiles):
@@ -472,7 +471,10 @@ def build(region_id, out_dir, client, opts=None, log=print, today=None):
     world = geo.WorldMap()
     unknown = [c for c in countries if c not in world.countries]
     if unknown:
-        raise BuildError("Not on the map: %s" % ", ".join(unknown))
+        # Sint Maarten shares its island's shape with Saint Martin, so photos there
+        # count as Saint Martin; it has no land of its own on the map.
+        log("No land of their own on the map, so no photos: %s" % ", ".join(unknown))
+        countries = [c for c in countries if c in world.countries]
     log("%s: %d countries (%s), %d places" % (title, len(countries), " ".join(countries), opts.places))
 
     tiles = fetch_coverage(client, world, countries, opts.zoom, log)

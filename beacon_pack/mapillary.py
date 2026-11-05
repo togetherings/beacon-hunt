@@ -41,6 +41,13 @@ class MapillaryError(Exception):
         self.status = status
 
 
+def _page_text(data):
+    """A short, readable bit of an error page, for messages."""
+    import re
+    text = re.sub(r"<[^>]+>", " ", bytes(data[:300]).decode("utf-8", "replace"))
+    return " ".join(text.split())[:80] or "(nothing)"
+
+
 def token_from_env():
     token = os.environ.get(TOKEN_ENV, "").strip()
     if not token:
@@ -130,10 +137,17 @@ class Client(object):
             if mvt.looks_valid(data):
                 break
             # Mapillary sometimes answers with an error page instead of a tile.
-            self.log("  tile %d/%d/%d isn't a tile (%r...)%s" % (
-                z, x, y, bytes(data[:20]), "; trying again" if attempt == 0 else "; skipping it"))
-            time.sleep(max(self.pause, 1.0))
-            data = b""
+            if attempt == 0:
+                self.log("  tile %d/%d/%d isn't a tile (%r...); trying again" % (z, x, y, bytes(data[:20])))
+                time.sleep(5.0 if self.pause else 0)
+                continue
+            # Twice: stop, instead of making a pack with holes in it. Everything so far is saved.
+            raise MapillaryError(
+                "Mapillary sent a page saying %r instead of tile %d/%d/%d.\n"
+                "This usually means the app has used up its tiles for today (Mapillary allows "
+                "50,000 tile requests a day), or the token isn't accepted for tiles. Everything so far "
+                "is saved: run the same command again later (for example tomorrow) to carry on."
+                % (_page_text(data), z, x, y))
         if path:
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path + ".part", "wb") as f:
