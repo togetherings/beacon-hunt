@@ -14,7 +14,7 @@ import threading
 from http.server import ThreadingHTTPServer
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-GAME = "f-org.togetherings.beacon-hunt"
+GAME = "g-org.togetherings.beacon-hunt"
 
 
 def serve(port):
